@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kithra — conversation intelligence</title>
+<meta name="description" content="Kithra turns your conversations into private, grounded intelligence — capture, analyze, and ask across everything you record." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<style>
+  html,body,#root{height:100%}
+  body{background:#0c0e1c}
+  #boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f1ea;z-index:9999;transition:opacity .4s}
+  #boot.gone{opacity:0;pointer-events:none}
+  .boot-wave{display:flex;gap:4px;align-items:center;height:34px}
+  .boot-wave i{width:4px;border-radius:99px;background:#3a6df4;animation:bw 1s ease-in-out infinite}
+  @keyframes bw{0%,100%{height:8px;opacity:.5}50%{height:30px;opacity:1}}
+</style>
+</head>
+<body>
+<div id="boot"><div class="boot-wave"><i style="animation-delay:0s"></i><i style="animation-delay:.1s"></i><i style="animation-delay:.2s"></i><i style="animation-delay:.3s"></i><i style="animation-delay:.4s"></i></div></div>
+<div id="root"></div>
+
+<script type="module" src="/src/main.jsx"></script>
+<script>
+  // enable entrance animations only once we confirm the animation clock runs
+  requestAnimationFrame(function(){ requestAnimationFrame(function(){
+    document.documentElement.classList.add('anim-ready');
+  }); });
+  // hide boot splash once React mounts
+  (function(){
+    var tries=0;
+    var iv=setInterval(function(){
+      tries++;
+      if(document.querySelector('#root').children.length || tries>60){
+        var b=document.getElementById('boot'); if(b) b.classList.add('gone');
+        setTimeout(function(){ if(b) b.remove(); }, 500);
+        clearInterval(iv);
+      }
+    },100);
+  })();
+</script>
+</body>
+</html>

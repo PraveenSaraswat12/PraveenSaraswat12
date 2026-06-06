@@ -1,0 +1,326 @@
+import React from 'react';
+import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Panel } from './screens-dashboard.jsx';
+/* ============================================================
+   LUMEN — Real audio upload + in-browser acoustic analysis
+   Uses Web Audio API to decode and measure the actual file.
+   ============================================================ */
+
+// ---- real signal analysis ----
+async function analyzeAudio(file, onProgress) {
+  const arrayBuf = await file.arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AC();
+  const audio = await ctx.decodeAudioData(arrayBuf.slice(0));
+  ctx.close && ctx.close();
+
+  const SR = audio.sampleRate;
+  const ch = audio.getChannelData(0);
+  const N = ch.length;
+  const duration = audio.duration;
+
+  const frameLen = Math.max(256, Math.floor(SR * 0.046)); // ~46ms frames
+  const nFrames = Math.floor(N / frameLen);
+  const step = nFrames > 26000 ? 2 : 1; // cap work on long files
+  const rms = [], zcr = [], times = [];
+  let maxRms = 0, sumRms = 0, cnt = 0;
+  for (let f = 0; f < nFrames; f += step) {
+    const start = f * frameLen;
+    let sum = 0, zc = 0, prev = ch[start];
+    for (let i = 1; i < frameLen; i++) {
+      const s = ch[start + i];
+      sum += s * s;
+      if ((s >= 0) !== (prev >= 0)) zc++;
+      prev = s;
+    }
+    const r = Math.sqrt(sum / frameLen);
+    rms.push(r); zcr.push(zc / frameLen); times.push(start / SR);
+    if (r > maxRms) maxRms = r;
+    sumRms += r; cnt++;
+    if (onProgress && (f % 400 === 0)) onProgress(f / nFrames);
+  }
+  const meanRms = sumRms / Math.max(1, cnt);
+
+  // silence / talk
+  const thresh = Math.max(0.012, maxRms * 0.13);
+  let talk = 0, silence = 0, pauses = 0, longest = 0, run = 0, onsets = 0;
+  const frameDur = (frameLen / SR) * step;
+  for (let i = 0; i < rms.length; i++) {
+    const active = rms[i] > thresh;
+    if (active) {
+      talk++;
+      if (i > 0 && rms[i - 1] <= thresh) onsets++;
+      if (run * frameDur >= 0.32) { pauses++; longest = Math.max(longest, run * frameDur); }
+      run = 0;
+    } else { silence++; run++; }
+  }
+  const talkRatio = talk / Math.max(1, talk + silence);
+
+  // dynamics (expressiveness) = coefficient of variation of active energy
+  let vSum = 0, vCnt = 0;
+  for (let i = 0; i < rms.length; i++) if (rms[i] > thresh) { vSum += rms[i]; vCnt++; }
+  const activeMean = vSum / Math.max(1, vCnt);
+  let varSum = 0;
+  for (let i = 0; i < rms.length; i++) if (rms[i] > thresh) varSum += (rms[i] - activeMean) ** 2;
+  const cv = Math.sqrt(varSum / Math.max(1, vCnt)) / Math.max(1e-6, activeMean);
+  const expressiveness = Math.round(Math.min(100, cv * 95));
+
+  // pace estimate from onsets (syllable-ish → words)
+  const minutes = duration / 60;
+  const words = onsets / 1.45;
+  const wpm = Math.round(words / Math.max(0.05, minutes));
+
+  // brightness from zero-crossing rate
+  let zSum = 0; for (let i = 0; i < zcr.length; i++) zSum += zcr[i];
+  const brightness = Math.round(Math.min(100, (zSum / Math.max(1, zcr.length)) / 0.18 * 100));
+
+  // loudness dBFS
+  const dbfs = Math.round(20 * Math.log10(Math.max(1e-6, meanRms)));
+
+  // downsample energy curve to ~50 pts (normalized)
+  const M = 50;
+  const energy = [];
+  for (let i = 0; i < M; i++) {
+    const a = Math.floor(i / M * rms.length), b = Math.floor((i + 1) / M * rms.length);
+    let s = 0, c = 0; for (let j = a; j < b; j++) { s += rms[j]; c++; }
+    energy.push({ x: i, y: maxRms ? (s / Math.max(1, c)) / maxRms : 0 });
+  }
+
+  // waveform peaks (~180)
+  const P = 180, peaks = [];
+  for (let i = 0; i < P; i++) {
+    const a = Math.floor(i / P * N), b = Math.floor((i + 1) / P * N);
+    let m = 0; for (let j = a; j < b; j += 16) { const v = Math.abs(ch[j]); if (v > m) m = v; }
+    peaks.push(maxRms ? Math.min(1, m / maxRms) : 0);
+  }
+
+  // key moments: top local maxima in energy
+  const cand = [];
+  for (let i = 2; i < rms.length - 2; i++) {
+    if (rms[i] > thresh * 1.4 && rms[i] >= rms[i - 1] && rms[i] > rms[i + 1]) cand.push({ t: times[i], e: rms[i] });
+  }
+  cand.sort((a, b) => b.e - a.e);
+  const moments = [];
+  for (const c of cand) { if (moments.every(m => Math.abs(m.t - c.t) > duration * 0.08)) moments.push(c); if (moments.length >= 3) break; }
+  moments.sort((a, b) => a.t - b.t);
+
+  return {
+    name: file.name, sizeMB: (file.size / 1048576).toFixed(1),
+    duration, sampleRate: SR, channels: audio.numberOfChannels,
+    talkRatio, pauses, longestPause: longest, wpm: Math.max(0, wpm),
+    expressiveness, brightness, dbfs, peaks, energy,
+    moments: moments.map(m => m.t),
+  };
+}
+
+const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function RealWave({ peaks, color = 'var(--accent)' }) {
+  return (
+    <div className="wave" style={{ height: 64, '--wb-gap': '2px' }}>
+      {peaks.map((h, i) => <i key={i} style={{ height: `${Math.max(4, Math.round(h * 100))}%`, background: color, opacity: 0.55 + 0.45 * h }} />)}
+    </div>
+  );
+}
+
+function summarize(r) {
+  const tr = Math.round(r.talkRatio * 100);
+  const paceWord = r.wpm > 175 ? 'brisk' : r.wpm > 130 ? 'steady' : 'measured';
+  const dyn = r.expressiveness > 60 ? 'expressive and dynamic' : r.expressiveness > 35 ? 'fairly even' : 'calm and level';
+  const momentStr = r.moments.length ? ` Energy peaked around ${r.moments.map(fmtTime).join(', ')}.` : '';
+  return `This ${fmtTime(r.duration)} recording is ${tr >= 65 ? 'mostly speech' : tr >= 40 ? 'a balanced mix of speech and pauses' : 'sparse, with lots of quiet'} (${tr}% active voice). You spoke at a ${paceWord} ~${r.wpm} words/min with ${r.pauses} notable pause${r.pauses === 1 ? '' : 's'}. Your delivery was ${dyn}.${momentStr}`;
+}
+
+function Analyze() {
+  const { mode } = useApp();
+  const [stage, setStage] = React.useState('idle'); // idle | analyzing | done | error
+  const [progress, setProgress] = React.useState(0);
+  const [res, setRes] = React.useState(null);
+  const [err, setErr] = React.useState('');
+  const [drag, setDrag] = React.useState(false);
+  const [aiSummary, setAiSummary] = React.useState('');
+  const inputRef = React.useRef(null);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setStage('analyzing'); setProgress(0); setErr(''); setAiSummary('');
+    try {
+      const r = await analyzeAudio(file, (p) => setProgress(Math.min(0.98, p)));
+      setRes(r); setProgress(1); setStage('done');
+      // optional: natural-language summary via Claude if available
+      if (window.claude && typeof window.claude.complete === 'function') {
+        try {
+          const prompt = `You are Kithra, a calm conversation-intelligence assistant. Based ONLY on these acoustic measurements of one audio recording, write exactly 2 warm, insightful sentences addressed to the speaker. Plain text only — no heading, no markdown, no bullet points, no bold. Do not invent words spoken or topics (this is acoustic-only). Metrics: duration ${fmtTime(r.duration)}, active-voice ${Math.round(r.talkRatio*100)}%, pace ~${r.wpm} wpm, ${r.pauses} pauses, expressiveness ${r.expressiveness}/100, brightness ${r.brightness}/100.`;
+          const out = await window.claude.complete(prompt);
+          const clean = (out || '').replace(/^#+\s.*$/gm, '').replace(/[*_`#>]/g, '').replace(/\n{2,}/g, ' ').replace(/\s+/g, ' ').trim();
+          if (clean) setAiSummary(clean);
+        } catch (e) {}
+      }
+    } catch (e) {
+      setErr('Could not decode that file. Try an MP3, WAV, M4A, or OGG audio file.');
+      setStage('error');
+    }
+  };
+
+  const reset = () => { setStage('idle'); setRes(null); setErr(''); setAiSummary(''); };
+
+  return (
+    <div className="page">
+      <div className="row" style={{ justifyContent:'space-between', alignItems:'flex-end', marginBottom:8, flexWrap:'wrap', gap:14 }}>
+        <div className="stack" style={{ gap:6 }}>
+          <span className="eyebrow">Try it now</span>
+          <h1 className="display" style={{ fontSize:28, margin:0, whiteSpace:'nowrap' }}>Analyze a recording</h1>
+        </div>
+        {stage==='done' && <button className="btn btn-soft" onClick={reset}><Icon name="refresh" size={16} />Analyze another</button>}
+      </div>
+      <p className="muted" style={{ margin:'0 0 var(--gap)', fontSize:14.5, maxWidth:620, lineHeight:1.55 }}>
+        Upload an audio file and Kithra runs a <strong>real acoustic analysis right in your browser</strong> — nothing is uploaded anywhere. You’ll see your actual waveform, energy, pacing, and pauses.
+      </p>
+
+      <input ref={inputRef} type="file" accept="audio/*" style={{ display:'none' }} onChange={e=>handleFile(e.target.files[0])} />
+
+      {stage==='idle' && (
+        <div className={`dropzone ${drag?'drag':''}`} onClick={()=>inputRef.current?.click()}
+          onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
+          onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0]);}}>
+          <div className="dz-ic"><Icon name="mic" size={28} /></div>
+          <h3 className="display" style={{ fontSize:22, margin:'0 0 6px' }}>Drop an audio file to analyze</h3>
+          <p className="muted" style={{ margin:'0 auto 16px', maxWidth:400, fontSize:14, lineHeight:1.5 }}>
+            MP3, WAV, M4A, or OGG. A short voice memo or a recorded call both work great.
+          </p>
+          <span className="btn btn-primary"><Icon name="upload" size={16} />Choose audio file</span>
+          <div style={{ marginTop:18, opacity:.6 }}><Waveform bars={44} seed={11} height={26} gap={3} color="var(--line-2)" /></div>
+          <PrivacyChip text="Processed locally — never leaves your device" />
+        </div>
+      )}
+
+      {stage==='analyzing' && (
+        <div className="card card-pad center" style={{ minHeight:280, textAlign:'center' }}>
+          <div className="stack center" style={{ gap:20, maxWidth:380 }}>
+            <LiveWave bars={36} height={70} color="var(--accent)" />
+            <div className="stack" style={{ gap:6 }}>
+              <h3 className="display" style={{ fontSize:22, margin:0 }}>Measuring your audio…</h3>
+              <p className="faint" style={{ fontSize:13, margin:0 }}>Decoding samples · reading energy, pacing & pauses</p>
+            </div>
+            <div className="bar" style={{ height:8, width:240 }}><i style={{ width:`${Math.round(progress*100)}%`, transition:'width .2s linear' }} /></div>
+          </div>
+        </div>
+      )}
+
+      {stage==='error' && (
+        <div className="card card-pad center" style={{ minHeight:200 }}>
+          <div className="stack center" style={{ gap:14 }}>
+            <span className="center" style={{ width:48, height:48, borderRadius:14, background:'var(--bad-soft)', color:'var(--bad)' }}><Icon name="x" size={24} /></span>
+            <p className="muted" style={{ margin:0, textAlign:'center', maxWidth:340 }}>{err}</p>
+            <button className="btn btn-primary" onClick={reset}>Try another file</button>
+          </div>
+        </div>
+      )}
+
+      {stage==='done' && res && <AnalyzeResults res={res} aiSummary={aiSummary} mode={mode} />}
+    </div>
+  );
+}
+
+function AnalyzeResults({ res, aiSummary, mode }) {
+  const metrics = [
+    { label:'Duration', value:fmtTime(res.duration), ic:'clock' },
+    { label:'Active voice', value:`${Math.round(res.talkRatio*100)}%`, ic:'wave', sub:'talk vs. silence' },
+    { label:'Speaking pace', value:`${res.wpm}`, unit:'wpm', ic:'bolt', sub:'estimated from rhythm' },
+    { label:'Pauses', value:`${res.pauses}`, ic:'pause', sub:`longest ${res.longestPause.toFixed(1)}s` },
+    { label:'Expressiveness', value:`${res.expressiveness}`, unit:'/100', ic:'spark', sub:'energy variation' },
+    { label:'Avg loudness', value:`${res.dbfs}`, unit:'dB', ic:'trend', sub:'full-scale' },
+  ];
+  return (
+    <div className="stack" style={{ gap:'var(--gap)' }}>
+      {/* waveform + summary */}
+      <div className="card card-pad anim-up">
+        <div className="row" style={{ justifyContent:'space-between', marginBottom:14, gap:12, flexWrap:'wrap' }}>
+          <div className="row" style={{ gap:11, minWidth:0 }}>
+            <span className="center" style={{ width:40, height:40, borderRadius:11, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name="wave" size={20} /></span>
+            <div className="stack" style={{ gap:2, minWidth:0 }}>
+              <span style={{ fontWeight:700, fontSize:15, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{res.name}</span>
+              <span className="faint" style={{ fontSize:12 }}>{res.sizeMB} MB · {(res.sampleRate/1000).toFixed(1)} kHz · {res.channels===1?'mono':'stereo'}</span>
+            </div>
+          </div>
+          <Badge kind="good" dot>Analyzed locally</Badge>
+        </div>
+        <RealWave peaks={res.peaks} />
+        <div className="row" style={{ justifyContent:'space-between', marginTop:8 }}>
+          <span className="faint tnum" style={{ fontSize:11.5 }}>0:00</span>
+          <span className="faint tnum" style={{ fontSize:11.5 }}>{fmtTime(res.duration)}</span>
+        </div>
+        <div className="card" style={{ marginTop:16, padding:'14px 16px', background:'var(--surface-2)', display:'flex', gap:12, alignItems:'flex-start' }}>
+          <span className="center" style={{ width:30, height:30, borderRadius:9, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }}><Icon name="spark" size={16} /></span>
+          <div className="stack" style={{ gap:4 }}>
+            <span className="eyebrow">Kithra’s read{aiSummary?'':' (from your audio)'}</span>
+            <p style={{ margin:0, fontSize:14, lineHeight:1.6 }}>{aiSummary || summarize(res)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* metrics */}
+      <div className="grid g-3 anim-up">
+        {metrics.map((m,i)=>(
+          <div key={i} className="card card-pad metric">
+            <span className="label"><Icon name={m.ic} size={15} />{m.label}</span>
+            <div className="val"><span className="metric-num n" style={{ fontSize:30 }}>{m.value}</span>{m.unit && <span className="u">{m.unit}</span>}</div>
+            {m.sub && <span className="faint" style={{ fontSize:12, marginTop:8, display:'block' }}>{m.sub}</span>}
+          </div>
+        ))}
+      </div>
+
+      {/* energy chart + key moments */}
+      <div className="grid g-2">
+        <Panel title="Vocal energy over time" sub="Loudness envelope measured from the waveform">
+          <LineChart series={[{ color:'var(--accent)', data:res.energy }]} height={170} yMin={0} yMax={1.05} labels={res.energy.map(()=> '')} />
+          <div className="row" style={{ justifyContent:'space-between', marginTop:8 }}>
+            <span className="faint tnum" style={{ fontSize:11.5 }}>0:00</span>
+            <span className="faint tnum" style={{ fontSize:11.5 }}>{fmtTime(res.duration)}</span>
+          </div>
+        </Panel>
+        <Panel title="Key moments" sub="Highest-energy points in the recording">
+          {res.moments.length ? (
+            <div className="stack" style={{ gap:9 }}>
+              {res.moments.map((t,i)=>(
+                <div key={i} className="row" style={{ gap:12, padding:'11px 12px', borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)' }}>
+                  <span className="center" style={{ width:34, height:34, borderRadius:10, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name="flame" size={17} /></span>
+                  <div className="stack grow" style={{ gap:1 }}>
+                    <span style={{ fontWeight:650, fontSize:13.5 }}>Energy peak {i+1}</span>
+                    <span className="faint" style={{ fontSize:12 }}>A louder, more emphatic moment</span>
+                  </div>
+                  <span className="tag tnum" style={{ flex:'none' }}><Icon name="clock" size={12} />{fmtTime(t)}</span>
+                </div>
+              ))}
+            </div>
+          ) : <p className="faint" style={{ fontSize:13 }}>No strong peaks detected — a calm, even recording.</p>}
+          <div className="row wrap" style={{ gap:18, marginTop:16, paddingTop:14, borderTop:'1px solid var(--line)' }}>
+            <div className="stack" style={{ gap:3 }}><span className="faint" style={{ fontSize:11.5, fontWeight:600 }}>Vocal brightness</span><span style={{ fontSize:16, fontWeight:700 }}>{res.brightness}/100</span></div>
+            <div className="stack" style={{ gap:3 }}><span className="faint" style={{ fontSize:11.5, fontWeight:600 }}>Tone</span><span style={{ fontSize:16, fontWeight:700 }}>{res.expressiveness>55?'Animated':res.expressiveness>30?'Balanced':'Calm'}</span></div>
+          </div>
+        </Panel>
+      </div>
+
+      {/* what needs a backend */}
+      <div className="card card-pad" style={{ background:'var(--surface-2)' }}>
+        <div className="row" style={{ gap:11, marginBottom:10 }}>
+          <span className="center" style={{ width:32, height:32, borderRadius:9, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="layers" size={17} /></span>
+          <span style={{ fontWeight:700, fontSize:15 }}>This is the acoustic layer — the full picture needs Kithra’s secure backend</span>
+        </div>
+        <p className="muted" style={{ margin:'0 0 14px', fontSize:13.5, lineHeight:1.6 }}>
+          Everything above was measured from your real audio, on-device. <strong>Transcription, who-said-what, objections, sentiment from words, and cross-call patterns</strong> require server-side speech-to-text and language models — that’s what a production backend adds.
+        </p>
+        <div className="row wrap" style={{ gap:8 }}>
+          {['Speech-to-text transcript','Speaker diarization','Word-level sentiment','Topic & objection detection','Cross-recording patterns'].map((x,i)=>(
+            <span key={i} className="tag"><Icon name="lock" size={12} />{x}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { Analyze });
+
+
+export { Analyze };
