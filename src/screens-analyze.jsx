@@ -133,13 +133,18 @@ function summarize(r) {
 
 function Analyze() {
   const { mode } = useApp();
-  const [stage, setStage] = React.useState('idle'); // idle | analyzing | done | error
+  const [stage, setStage] = React.useState('idle'); // idle | recording | analyzing | done | error
   const [progress, setProgress] = React.useState(0);
   const [res, setRes] = React.useState(null);
   const [err, setErr] = React.useState('');
   const [drag, setDrag] = React.useState(false);
   const [aiSummary, setAiSummary] = React.useState('');
+  const [recSecs, setRecSecs] = React.useState(0);
   const inputRef = React.useRef(null);
+  const recRef = React.useRef(null);
+  const streamRef = React.useRef(null);
+  const chunksRef = React.useRef([]);
+  const recTimerRef = React.useRef(null);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -164,6 +169,39 @@ function Analyze() {
 
   const reset = () => { setStage('idle'); setRes(null); setErr(''); setAiSummary(''); };
 
+  // ---- live recording (MediaRecorder → same in-browser analysis) ----
+  const stopTracks = () => { try { streamRef.current?.getTracks().forEach(t => t.stop()); } catch (e) {} streamRef.current = null; };
+  const startRecording = async () => {
+    setErr('');
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setErr('Recording isn’t supported in this browser — try uploading a file instead.'); setStage('error'); return;
+    }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch (e) { setErr('Microphone access was blocked. Allow the mic in your browser, or upload a file instead.'); setStage('error'); return; }
+    streamRef.current = stream; chunksRef.current = [];
+    let mr;
+    try { mr = new MediaRecorder(stream); }
+    catch (e) { stopTracks(); setErr('Recording isn’t supported here — try uploading a file instead.'); setStage('error'); return; }
+    recRef.current = mr;
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+    mr.onstop = () => {
+      clearInterval(recTimerRef.current); stopTracks();
+      if (!chunksRef.current.length) { setErr('That recording came through empty — please try again.'); setStage('error'); return; }
+      const type = mr.mimeType || 'audio/webm';
+      const ext = /mp4|aac/.test(type) ? 'm4a' : /ogg/.test(type) ? 'ogg' : 'webm';
+      handleFile(new File(chunksRef.current, `Live recording.${ext}`, { type }));
+    };
+    setRecSecs(0); setStage('recording'); mr.start();
+    recTimerRef.current = setInterval(() => setRecSecs(s => s + 1), 1000);
+  };
+  const stopRecording = () => { try { if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop(); } catch (e) {} };
+  const cancelRecording = () => {
+    try { if (recRef.current && recRef.current.state !== 'inactive') { recRef.current.onstop = null; recRef.current.stop(); } } catch (e) {}
+    clearInterval(recTimerRef.current); stopTracks(); reset();
+  };
+  React.useEffect(() => () => { clearInterval(recTimerRef.current); stopTracks(); }, []);
+
   return (
     <div className="page">
       <div className="row" style={{ justifyContent:'space-between', alignItems:'flex-end', marginBottom:8, flexWrap:'wrap', gap:14 }}>
@@ -174,7 +212,7 @@ function Analyze() {
         {stage==='done' && <button className="btn btn-soft" onClick={reset}><Icon name="refresh" size={16} />Analyze another</button>}
       </div>
       <p className="muted" style={{ margin:'0 0 var(--gap)', fontSize:14.5, maxWidth:620, lineHeight:1.55 }}>
-        Upload an audio file and Kithra runs a <strong>real acoustic analysis right in your browser</strong> — nothing is uploaded anywhere. You’ll see your actual waveform, energy, pacing, and pauses.
+        Record straight from your mic or upload an audio file, and Kithra runs a <strong>real acoustic analysis right in your browser</strong> — nothing is uploaded anywhere. You’ll see your actual waveform, energy, pacing, and pauses.
       </p>
 
       <input ref={inputRef} type="file" accept="audio/*" style={{ display:'none' }} onChange={e=>handleFile(e.target.files[0])} />
@@ -184,11 +222,16 @@ function Analyze() {
           onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)}
           onDrop={e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0]);}}>
           <div className="dz-ic"><Icon name="mic" size={28} /></div>
-          <h3 className="display" style={{ fontSize:22, margin:'0 0 6px' }}>Drop an audio file to analyze</h3>
+          <h3 className="display" style={{ fontSize:22, margin:'0 0 6px' }}>Record or drop an audio file</h3>
           <p className="muted" style={{ margin:'0 auto 16px', maxWidth:400, fontSize:14, lineHeight:1.5 }}>
-            MP3, WAV, M4A, or OGG. A short voice memo or a recorded call both work great.
+            Record live from your microphone, or use an MP3, WAV, M4A, or OGG. A short voice memo or a recorded call both work great.
           </p>
-          <span className="btn btn-primary"><Icon name="upload" size={16} />Choose audio file</span>
+          <div className="row center" style={{ gap:10, flexWrap:'wrap' }}>
+            <button type="button" className="btn btn-primary" onClick={(e)=>{ e.stopPropagation(); startRecording(); }}>
+              <span style={{ width:9, height:9, borderRadius:'50%', background:'currentColor', display:'inline-block' }} />Record audio
+            </button>
+            <span className="btn btn-soft"><Icon name="upload" size={16} />Choose audio file</span>
+          </div>
           <div style={{ marginTop:18, opacity:.6 }}><Waveform bars={44} seed={11} height={26} gap={3} color="var(--line-2)" /></div>
           <PrivacyChip text="Processed locally — never leaves your device" />
         </div>
@@ -203,6 +246,23 @@ function Analyze() {
               <p className="faint" style={{ fontSize:13, margin:0 }}>Decoding samples · reading energy, pacing & pauses</p>
             </div>
             <div className="bar" style={{ height:8, width:240 }}><i style={{ width:`${Math.round(progress*100)}%`, transition:'width .2s linear' }} /></div>
+          </div>
+        </div>
+      )}
+
+      {stage==='recording' && (
+        <div className="card card-pad center" style={{ minHeight:280, textAlign:'center' }}>
+          <div className="stack center" style={{ gap:18, maxWidth:420 }}>
+            <span className="row center" style={{ gap:8, color:'var(--bad)', fontWeight:700, fontSize:13.5, letterSpacing:'.04em' }}>
+              <span style={{ width:10, height:10, borderRadius:'50%', background:'var(--bad)', display:'inline-block' }} />REC
+            </span>
+            <LiveWave bars={36} height={70} color="var(--bad)" />
+            <div className="metric-num tnum" style={{ fontSize:34 }}>{fmtTime(recSecs)}</div>
+            <p className="faint" style={{ fontSize:13, margin:0, maxWidth:320, lineHeight:1.5 }}>Speak naturally. Your audio is recorded and analyzed entirely on your device.</p>
+            <div className="row center" style={{ gap:10 }}>
+              <button className="btn btn-primary" onClick={stopRecording}><Icon name="check" size={16} />Stop &amp; analyze</button>
+              <button className="btn btn-ghost" onClick={cancelRecording}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
