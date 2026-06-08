@@ -315,6 +315,112 @@ function speakingInsights(r) {
   return out;
 }
 
+// ---- on-device speech-to-text (Whisper via transformers.js, loaded on demand) ----
+let _asr = null;
+// load transformers.js, trying a few CDN forms for resilience
+async function loadTransformers() {
+  const urls = [
+    'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3',
+    'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm',
+    'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2',
+  ];
+  let lastErr;
+  for (const u of urls) {
+    try { const m = await import(/* @vite-ignore */ u); if (m && m.pipeline) return m; } catch (e) { lastErr = e; }
+  }
+  throw lastErr || new Error('Could not load the on-device AI library');
+}
+async function getTranscriber(onProgress) {
+  if (_asr) return _asr;
+  const build = (async () => {
+    const mod = await loadTransformers();
+    if (mod.env) mod.env.allowLocalModels = false;
+    return await mod.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', { progress_callback: onProgress });
+  })();
+  _asr = build;
+  try { return await build; } catch (e) { _asr = null; throw e; }
+}
+// decode any audio source (object URL) → 16kHz mono Float32Array for Whisper
+async function to16kMono(src) {
+  const arrayBuf = await (await fetch(src)).arrayBuffer();
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const tmp = new AC();
+  const decoded = await tmp.decodeAudioData(arrayBuf.slice(0));
+  tmp.close && tmp.close();
+  const SR = 16000;
+  const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  const off = new OAC(1, Math.max(1, Math.ceil(decoded.duration * SR)), SR);
+  const node = off.createBufferSource(); node.buffer = decoded; node.connect(off.destination); node.start();
+  const rendered = await off.startRendering();
+  return rendered.getChannelData(0);
+}
+function transcriptInsights(text, durSec) {
+  const words = text.match(/[A-Za-z0-9’']+/g) || [];
+  const wc = words.length;
+  const wpm = durSec ? Math.round(wc / (durSec / 60)) : 0;
+  const fillers = (text.match(/\b(um+|uh+|er+|like|you know|sort of|kind of|basically|actually|literally)\b/gi) || []).length;
+  return { wc, wpm, fillers };
+}
+
+function TranscriptPanel({ clipUrl, durSec }) {
+  const [state, setState] = React.useState('idle'); // idle | loading | running | done | error
+  const [text, setText] = React.useState('');
+  const [prog, setProg] = React.useState(0);
+  const [err, setErr] = React.useState('');
+  const run = async () => {
+    if (!clipUrl) return;
+    setState('loading'); setProg(0); setErr('');
+    try {
+      const transcriber = await getTranscriber((p) => { if (p && typeof p.progress === 'number') setProg(p.progress); });
+      setState('running');
+      const audio = await to16kMono(clipUrl);
+      const out = await transcriber(audio, { chunk_length_s: 30, stride_length_s: 5 });
+      setText(((out && out.text) || '').trim()); setState('done');
+    } catch (e) {
+      setErr('Couldn’t run on-device transcription here. It needs a modern browser (Chrome works best) and a moment to download the AI model the first time — please try again.');
+      setState('error');
+    }
+  };
+  const ins = state === 'done' ? transcriptInsights(text, durSec) : null;
+  return (
+    <Panel title="Transcript" sub="Real speech-to-text — runs privately on your device, no upload">
+      {state === 'idle' && (
+        <div className="stack" style={{ gap: 10 }}>
+          <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>Turn this recording into text with an on-device AI model. The first run downloads the model (~40&nbsp;MB) and can take a moment; after that it’s instant and cached.</p>
+          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />Transcribe with on-device AI</button>
+        </div>
+      )}
+      {state === 'loading' && (
+        <div className="stack" style={{ gap: 8 }}>
+          <span className="faint" style={{ fontSize: 13 }}>Loading the AI model… {Math.round(prog)}%</span>
+          <div className="bar" style={{ height: 8 }}><i style={{ width: `${Math.max(4, Math.round(prog))}%`, transition: 'width .3s' }} /></div>
+        </div>
+      )}
+      {state === 'running' && (
+        <div className="row" style={{ gap: 12 }}><LiveWave bars={22} height={34} color="var(--accent)" /><span className="faint" style={{ fontSize: 13 }}>Transcribing your audio…</span></div>
+      )}
+      {state === 'error' && (
+        <div className="stack" style={{ gap: 10 }}><p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>{err}</p><button className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}>Try again</button></div>
+      )}
+      {state === 'done' && (
+        <div className="stack" style={{ gap: 14 }}>
+          {ins && (
+            <div className="row wrap" style={{ gap: 8 }}>
+              <span className="tag"><Icon name="file" size={12} />{ins.wc} words</span>
+              <span className="tag"><Icon name="bolt" size={12} />{ins.wpm} wpm spoken</span>
+              {ins.fillers > 0 && <span className="tag"><Icon name="wave" size={12} />{ins.fillers} filler{ins.fillers > 1 ? 's' : ''}</span>}
+            </div>
+          )}
+          <div className="card" style={{ padding: '14px 16px', background: 'var(--surface-2)', maxHeight: 240, overflow: 'auto' }}>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{text || '(No clear speech detected in this audio.)'}</p>
+          </div>
+          <button className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="refresh" size={14} />Re-run</button>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
   const metrics = [
     { label:'Duration', value:fmtTime(res.duration), ic:'clock' },
@@ -369,6 +475,8 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
 
       {/* deeper speaking insights — Plus */}
       {planAllows && planAllows('plus') ? (
+       <>
+        {clipUrl && <TranscriptPanel clipUrl={clipUrl} durSec={res.duration} />}
         <Panel title="Speaking insights" sub="A coaching read from your real acoustics">
           <div className="grid g-2">
             {speakingInsights(res).map((it,i)=>(
@@ -382,6 +490,7 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
             ))}
           </div>
         </Panel>
+       </>
       ) : (
         <div className="card card-pad" style={{ background:'var(--accent-soft)', border:'1px solid color-mix(in srgb,var(--accent) 22%,transparent)' }}>
           <div className="row" style={{ gap:11, marginBottom:8 }}>
