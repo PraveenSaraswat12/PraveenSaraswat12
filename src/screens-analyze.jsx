@@ -335,7 +335,7 @@ async function getTranscriber(onProgress) {
   const build = (async () => {
     const mod = await loadTransformers();
     if (mod.env) mod.env.allowLocalModels = false;
-    return await mod.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en', { progress_callback: onProgress });
+    return await mod.pipeline('automatic-speech-recognition', 'Xenova/whisper-base', { progress_callback: onProgress });
   })();
   _asr = build;
   try { return await build; } catch (e) { _asr = null; throw e; }
@@ -367,6 +367,7 @@ function TranscriptPanel({ clipUrl, durSec }) {
   const [text, setText] = React.useState('');
   const [prog, setProg] = React.useState(0);
   const [err, setErr] = React.useState('');
+  const [lang, setLang] = React.useState(''); // '' = auto-detect
   const run = async () => {
     if (!clipUrl) return;
     setState('loading'); setProg(0); setErr('');
@@ -374,7 +375,7 @@ function TranscriptPanel({ clipUrl, durSec }) {
       const transcriber = await getTranscriber((p) => { if (p && typeof p.progress === 'number') setProg(p.progress); });
       setState('running');
       const audio = await to16kMono(clipUrl);
-      const out = await transcriber(audio, { chunk_length_s: 30, stride_length_s: 5 });
+      const out = await transcriber(audio, { chunk_length_s: 30, stride_length_s: 5, language: lang || undefined, task: 'transcribe' });
       setText(((out && out.text) || '').trim()); setState('done');
     } catch (e) {
       setErr('Couldn’t run on-device transcription here. It needs a modern browser (Chrome works best) and a moment to download the AI model the first time — please try again.');
@@ -382,12 +383,34 @@ function TranscriptPanel({ clipUrl, durSec }) {
     }
   };
   const ins = state === 'done' ? transcriptInsights(text, durSec) : null;
+  const langSelect = (
+    <label className="row" style={{ gap: 7, alignItems: 'center', fontSize: 12.5 }}>
+      <span className="faint">Language</span>
+      <select value={lang} onChange={(e) => setLang(e.target.value)}
+        style={{ height: 34, padding: '0 8px', borderRadius: 'var(--r-ctrl)', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)', font: 'inherit' }}>
+        <option value="">Auto-detect</option>
+        <option value="english">English</option>
+        <option value="hindi">Hindi</option>
+        <option value="spanish">Spanish</option>
+        <option value="french">French</option>
+        <option value="german">German</option>
+        <option value="portuguese">Portuguese</option>
+        <option value="arabic">Arabic</option>
+        <option value="chinese">Chinese</option>
+        <option value="japanese">Japanese</option>
+        <option value="russian">Russian</option>
+      </select>
+    </label>
+  );
   return (
     <Panel title="Transcript" sub="Real speech-to-text — runs privately on your device, no upload">
       {state === 'idle' && (
-        <div className="stack" style={{ gap: 10 }}>
-          <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>Turn this recording into text with an on-device AI model. The first run downloads the model (~40&nbsp;MB) and can take a moment; after that it’s instant and cached.</p>
-          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />Transcribe with on-device AI</button>
+        <div className="stack" style={{ gap: 12 }}>
+          <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>Turn this recording into text with a multilingual on-device AI model (English, Hindi, Spanish and many more). The first run downloads the model once (~145&nbsp;MB) and can take a moment; after that it’s cached.</p>
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {langSelect}
+            <button className="btn btn-primary btn-sm" onClick={run}><Icon name="spark" size={14} fill />Transcribe with on-device AI</button>
+          </div>
         </div>
       )}
       {state === 'loading' && (
@@ -414,7 +437,10 @@ function TranscriptPanel({ clipUrl, durSec }) {
           <div className="card" style={{ padding: '14px 16px', background: 'var(--surface-2)', maxHeight: 240, overflow: 'auto' }}>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{text || '(No clear speech detected in this audio.)'}</p>
           </div>
-          <button className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="refresh" size={14} />Re-run</button>
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {langSelect}
+            <button className="btn btn-soft btn-sm" onClick={run}><Icon name="refresh" size={14} />Re-run</button>
+          </div>
         </div>
       )}
     </Panel>
