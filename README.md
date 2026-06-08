@@ -1,8 +1,6 @@
 - 👋 Hi, I’m @PraveenSaraswat12
-- 👀 I’m interested in Data Analysis & Visualisation through SQL & Power BI
-- 🌱 I’m currently learning Advanced Data Analysis.
-- 💞️ I’m looking to collaborate on new projects which can provide me a good platform.
-- 📫 Reach me on saraswatpraveen21@gmail.com
+- 🚚 I’m a Supply Chain & Logistics professional
+- 🤖 I’m more excited about AI & the new tech coming into this field, and want to build something in this space
 - 🏗️ Currently building **Kithra** — something worth the wait.
 
 <!---
