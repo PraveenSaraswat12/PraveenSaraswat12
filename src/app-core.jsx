@@ -17,6 +17,7 @@ const ROUTES = {
   ask:          { app:true,  label:'Ask Kithra',    icon:'chat',    group:'main' },
   patterns:     { app:true,  label:'Patterns',     icon:'trend',   group:'main' },
   library:      { app:true,  label:'Recordings',   icon:'layers',  group:'data' },
+  books:        { app:true,  label:'Books',        icon:'book',    group:'data' },
   analyze:      { app:true,  label:'Analyze audio', icon:'mic',    group:'data' },
   sources:      { app:true,  label:'Sources',      icon:'upload',  group:'data' },
   privacy:      { app:true,  label:'Privacy & Data', icon:'shield', group:'data' },

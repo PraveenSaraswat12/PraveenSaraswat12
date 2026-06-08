@@ -8,6 +8,67 @@ function Toggle({ on, onClick }) {
   return <button className={`toggle ${on?'on':''}`} onClick={onClick} role="switch" aria-checked={on}><i /></button>;
 }
 
+function CloudAccount() {
+  const { showToast, books } = useApp();
+  const Cloud = window.KithraCloud;
+  const [cfg, setCfg] = React.useState(() => (Cloud && Cloud.config && Cloud.config()) || null);
+  const [url, setUrl] = React.useState(cfg?.SUPABASE_URL || '');
+  const [key, setKey] = React.useState(cfg?.SUPABASE_ANON_KEY || '');
+  const [user, setUser] = React.useState(null);
+  const [email, setEmail] = React.useState('');
+  const [pw, setPw] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState('');
+  const connected = !!cfg;
+  React.useEffect(() => { let on = true; (async () => { if (Cloud && Cloud.configured && Cloud.configured()) { const u = await Cloud.getUser(); if (on) setUser(u); } })(); return () => { on = false; }; }, [cfg]);
+  if (!Cloud) return null;
+  const connect = () => { if (!url.trim() || !key.trim()) { setErr('Paste your Project URL and anon key.'); return; } Cloud.saveConfig(url, key); setCfg(Cloud.config()); setErr(''); showToast('Cloud connected', 'link'); };
+  const disconnect = () => { Cloud.clearConfig(); setCfg(null); setUser(null); showToast('Cloud disconnected', 'check'); };
+  const auth = async (kind) => {
+    setBusy(true); setErr('');
+    try { await (kind === 'up' ? Cloud.signUp : Cloud.signIn)(email.trim(), pw); const u = await Cloud.getUser(); setUser(u); if (u) { Cloud.syncBooks(books); showToast(kind === 'up' ? 'Account created' : 'Signed in', 'check'); } else showToast('Check your email to confirm', 'check'); }
+    catch (e) { setErr(e.message || String(e)); }
+    setBusy(false);
+  };
+  const signOut = async () => { await Cloud.signOut(); setUser(null); showToast('Signed out', 'check'); };
+  return (
+    <Panel title="Cloud & account" sub="Optional — sync across devices + Gemma AI, on your own free Supabase">
+      {!connected ? (
+        <div className="stack" style={{ gap: 12 }}>
+          <p className="muted" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55 }}>Kithra works on this device with no account. To sync your books &amp; recordings and turn on Gemma AI, connect a free Supabase project (5-minute setup in <code>cloud/README.md</code>).</p>
+          <label className="stack" style={{ gap: 5 }}><span className="eyebrow">Supabase Project URL</span><input className="field" style={{ height: 40 }} value={url} onChange={e => setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" /></label>
+          <label className="stack" style={{ gap: 5 }}><span className="eyebrow">anon public key</span><input className="field" style={{ height: 40 }} value={key} onChange={e => setKey(e.target.value)} placeholder="eyJhbGciOi…" /></label>
+          {err && <span style={{ color: 'var(--bad)', fontSize: 12.5 }}>{err}</span>}
+          <button className="btn btn-primary" style={{ alignSelf: 'flex-start' }} onClick={connect}><Icon name="link" size={15} />Connect cloud</button>
+        </div>
+      ) : user ? (
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="row" style={{ gap: 11 }}>
+            <Avatar label={(user.email || 'U')[0].toUpperCase()} color="var(--accent)" size={40} />
+            <div className="stack" style={{ gap: 1, minWidth: 0 }}><span style={{ fontWeight: 700, fontSize: 14 }}>{user.email}</span><span className="faint" style={{ fontSize: 12 }}>Signed in · your library syncs to the cloud</span></div>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-soft btn-sm" onClick={() => { Cloud.syncBooks(books); showToast('Library synced', 'check'); }}><Icon name="refresh" size={14} />Sync now</button>
+            <button className="btn btn-soft btn-sm" onClick={signOut}>Sign out</button>
+            <button className="btn btn-ghost btn-sm" onClick={disconnect}>Disconnect</button>
+          </div>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}><Badge kind="good" dot>Cloud connected</Badge><button className="btn btn-ghost btn-sm" onClick={disconnect}>Change project</button></div>
+          <label className="stack" style={{ gap: 5 }}><span className="eyebrow">Email</span><input className="field" style={{ height: 40 }} type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" /></label>
+          <label className="stack" style={{ gap: 5 }}><span className="eyebrow">Password</span><input className="field" style={{ height: 40 }} type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="••••••••" /></label>
+          {err && <span style={{ color: 'var(--bad)', fontSize: 12.5 }}>{err}</span>}
+          <div className="row" style={{ gap: 8 }}>
+            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => auth('up')}>{busy ? '…' : 'Create account'}</button>
+            <button className="btn btn-soft btn-sm" disabled={busy} onClick={() => auth('in')}>Sign in</button>
+          </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 function Privacy() {
   const { mode, showToast, setWiped, go, plan, planAllows } = useApp();
   const [delOpen, setDelOpen] = React.useState(false);
@@ -52,6 +113,8 @@ function Privacy() {
             ))}
           </div>
         </div>
+
+        <CloudAccount />
 
         {/* controls */}
         <Panel title="Privacy" sub="Decide how Kithra handles your recordings">

@@ -448,6 +448,7 @@ function TranscriptPanel({ clipUrl, durSec }) {
 }
 
 function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
+  const { books } = useApp();
   const metrics = [
     { label:'Duration', value:fmtTime(res.duration), ic:'clock' },
     { label:'Active voice', value:`${Math.round(res.talkRatio*100)}%`, ic:'wave', sub:'talk vs. silence' },
@@ -516,6 +517,12 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
             ))}
           </div>
         </Panel>
+        {Array.isArray(books) && books.length>0 && (
+          <Panel title="Informed by your library" sub="Kithra grounds suggestions in the books you trust">
+            <EvidenceList items={books.slice(0,5).map(b=>({ title:b.title, author:b.author, type:b.type }))} label="Drawing on" />
+            <button className="btn btn-soft btn-sm" style={{ marginTop:12 }} onClick={()=>go && go('books')}><Icon name="book" size={14} />Manage your books</button>
+          </Panel>
+        )}
        </>
       ) : (
         <div className="card card-pad" style={{ background:'var(--accent-soft)', border:'1px solid color-mix(in srgb,var(--accent) 22%,transparent)' }}>

@@ -91,6 +91,24 @@ function AppProvider() {
     return cs.filter(c => c.id !== id);
   }), []);
 
+  // ----- books library (knowledge base that grounds insights) — persisted on-device -----
+  const BOOK_SEED = [
+    { id:'b-spin', title:'SPIN Selling', author:'Neil Rackham', type:'book', notes:'Question-led discovery: Situation, Problem, Implication, Need-payoff.' },
+    { id:'b-challenger', title:'The Challenger Sale', author:'Dixon & Adamson', type:'book', notes:'Teach, tailor, and take control of the conversation.' },
+    { id:'b-voss', title:'Never Split the Difference', author:'Chris Voss', type:'book', notes:'Tactical empathy, calibrated questions, and labels.' },
+    { id:'b-nvc', title:'Nonviolent Communication', author:'Marshall B. Rosenberg', type:'book', notes:'Observations, feelings, needs, requests.' },
+    { id:'b-eq', title:'Emotional Intelligence', author:'Daniel Goleman', type:'book', notes:'Self-awareness and regulation in the moment.' },
+    { id:'b-mbsr', title:'Mindfulness-Based Stress Reduction', author:'Jon Kabat-Zinn', type:'practice', notes:'A pause and a breath before reacting.' },
+  ];
+  const [books, setBooks] = React.useState(() => {
+    try { const s = JSON.parse(localStorage.getItem('kithra_books')); return Array.isArray(s) ? s : BOOK_SEED; } catch(e){ return BOOK_SEED; }
+  });
+  React.useEffect(() => { try { localStorage.setItem('kithra_books', JSON.stringify(books)); } catch(e){}
+    try { window.KithraCloud && window.KithraCloud.syncBooks && window.KithraCloud.syncBooks(books); } catch(e){} }, [books]);
+  const addBook = React.useCallback((b) => setBooks(bs => [{ ...b, id: b.id || ('b-' + Date.now()), addedAt: Date.now() }, ...bs]), []);
+  const updateBook = React.useCallback((id, patch) => setBooks(bs => bs.map(b => b.id === id ? { ...b, ...patch } : b)), []);
+  const removeBook = React.useCallback((id) => setBooks(bs => bs.filter(b => b.id !== id)), []);
+
   // ----- voice prefs (shared by Ask + background capture) -----
   const [voicePrefs, setVoicePrefs] = React.useState({ lang:'auto', voice:'', voiceReply:true });
   const setVoice = React.useCallback((patch) => setVoicePrefs(p => ({ ...p, ...patch })), []);
@@ -114,6 +132,7 @@ function AppProvider() {
     sidebarCollapsed, setSidebarCollapsed,
     clips, addClip, removeClip, viewClip, setViewClip,
     convoFrom, viewConvo, setViewConvo,
+    books, addBook, updateBook, removeBook,
   };
 
   // ----- apply tokens to root -----
@@ -161,6 +180,7 @@ function AppShell() {
     ask: window.AskKithra,
     patterns: window.Patterns,
     library: window.Library,
+    books: window.Books,
     analyze: window.Analyze,
     sources: window.SourcesPanel,
     privacy: window.Privacy,
