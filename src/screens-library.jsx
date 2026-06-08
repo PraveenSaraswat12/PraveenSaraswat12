@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Icon, RealPlayer, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 /* ============================================================
    SONARI — Recordings Library (Data): filters + playback + backup
    ============================================================ */
@@ -63,7 +63,7 @@ function GatedFilter({ allowed, tier, icon, label, value, options, onChange, go,
 }
 
 function Library() {
-  const { mode, go, t, plan, planAllows, wiped, setWiped, showToast } = useApp();
+  const { mode, go, t, plan, planAllows, wiped, setWiped, showToast, clips, removeClip, setViewClip } = useApp();
   const baseAll = React.useMemo(()=>buildLibrary(mode), [mode]);
   const all = wiped ? [] : baseAll;
   const isBiz = mode === 'business';
@@ -153,6 +153,41 @@ function Library() {
             <span className="faint" style={{ fontSize:12.5, lineHeight:1.45 }}>While Listen mode is on, Kithra chunks and backs up audio to the cloud every 15 min — even when your phone is locked.</span>
           </div>
         </div>
+      </div>
+
+      {/* your real, playable recordings (this session) */}
+      <div className="card card-pad" style={{ marginBottom:'var(--gap)' }}>
+        <div className="row" style={{ justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom: clips.length?12:0 }}>
+          <span className="row" style={{ gap:9, fontWeight:700, fontSize:14.5 }}>
+            <span className="center" style={{ width:28, height:28, borderRadius:8, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="mic" size={15} /></span>
+            Your recordings <span className="badge badge-good" style={{ height:19 }}>{clips.length}</span>
+          </span>
+          <button className="btn btn-soft btn-sm" onClick={()=>go('analyze')}><Icon name="plus" size={15} />Record / upload</button>
+        </div>
+        {clips.length===0
+          ? <p className="faint" style={{ fontSize:13, margin:'4px 0 0', lineHeight:1.55 }}>Audio you record or upload on <button className="linkbtn" onClick={()=>go('analyze')}>Analyze audio</button> is saved here for this session — and really plays back. Nothing leaves your device.</p>
+          : <div className="stack" style={{ gap:12 }}>
+              {clips.map(c=>{
+                const a = c.analysis || {};
+                return (
+                  <div key={c.id} className="card" style={{ padding:'12px 14px', background:'var(--surface-2)' }}>
+                    <div className="row" style={{ justifyContent:'space-between', gap:10, marginBottom:9, flexWrap:'wrap' }}>
+                      <span className="row" style={{ gap:8, minWidth:0 }}>
+                        <Badge kind="good" dot>Analyzed locally</Badge>
+                        <span style={{ fontWeight:650, fontSize:13.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name}</span>
+                      </span>
+                      <div className="row" style={{ gap:6, flex:'none', flexWrap:'wrap' }}>
+                        {a.wpm!=null && <span className="lib-meta tnum">{a.wpm} wpm</span>}
+                        {a.talkRatio!=null && <span className="lib-meta tnum">{Math.round(a.talkRatio*100)}% voice</span>}
+                        <button className="btn btn-soft btn-sm" onClick={()=>{ setViewClip(c); go('analyze'); }}><Icon name="spark" size={14} />Insights</button>
+                        <button className="btn btn-icon btn-ghost btn-sm" aria-label="Remove recording" onClick={()=>removeClip(c.id)}><Icon name="trash" size={14} /></button>
+                      </div>
+                    </div>
+                    <RealPlayer src={c.url} peaks={c.peaks} durSec={c.durSec} />
+                  </div>
+                );
+              })}
+            </div>}
       </div>
 
       {/* filters */}

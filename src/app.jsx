@@ -72,6 +72,16 @@ function AppProvider() {
     setPerms(p); try { localStorage.setItem('kithra_perms', JSON.stringify(p)); } catch(e){}
   }, []);
 
+  // ----- user's real recordings/uploads (session) — shared across Analyze + Recordings -----
+  const [clips, setClips] = React.useState([]);
+  const [viewClip, setViewClip] = React.useState(null); // clip whose insights to open on Analyze
+  const addClip = React.useCallback((clip) => setClips(cs => [clip, ...cs].slice(0, 20)), []);
+  const removeClip = React.useCallback((id) => setClips(cs => {
+    const gone = cs.find(c => c.id === id);
+    if (gone && gone.url) { try { URL.revokeObjectURL(gone.url); } catch(e){} }
+    return cs.filter(c => c.id !== id);
+  }), []);
+
   // ----- voice prefs (shared by Ask + background capture) -----
   const [voicePrefs, setVoicePrefs] = React.useState({ lang:'auto', voice:'', voiceReply:true });
   const setVoice = React.useCallback((patch) => setVoicePrefs(p => ({ ...p, ...patch })), []);
@@ -93,6 +103,7 @@ function AppProvider() {
     capture, openCapture, closeCapture, minimizeCapture, expandCapture, setCapMode,
     plus, setPlus, plan, setPlan, planAllows, wiped, setWiped, toast, showToast, perms, savePerms,
     sidebarCollapsed, setSidebarCollapsed,
+    clips, addClip, removeClip, viewClip, setViewClip,
   };
 
   // ----- apply tokens to root -----
@@ -244,7 +255,7 @@ function AccountMenu() {
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
   const items = [
-    { ic:'user', label:'Profile', act:()=>showToast('Profile — coming soon','user') },
+    { ic:'user', label:'Profile', act:()=>go('privacy') },
     { ic:'spark', label:'Plans & billing', act:()=>go('pricing') },
     { ic:'layers', label:'My recordings', act:()=>go('library') },
     { ic:'shield', label:'Privacy & data', act:()=>go('privacy') },

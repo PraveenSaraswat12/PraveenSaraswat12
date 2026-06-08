@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Icon, RealPlayer, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 import { Panel } from './screens-dashboard.jsx';
 /* ============================================================
    LUMEN — Real audio upload + in-browser acoustic analysis
@@ -132,8 +132,9 @@ function summarize(r) {
 }
 
 function Analyze() {
-  const { mode } = useApp();
+  const { mode, plan, planAllows, go, addClip, viewClip, setViewClip } = useApp();
   const [stage, setStage] = React.useState('idle'); // idle | recording | analyzing | done | error
+  const [clipUrl, setClipUrl] = React.useState(null);
   const [progress, setProgress] = React.useState(0);
   const [res, setRes] = React.useState(null);
   const [err, setErr] = React.useState('');
@@ -152,6 +153,13 @@ function Analyze() {
     try {
       const r = await analyzeAudio(file, (p) => setProgress(Math.min(0.98, p)));
       setRes(r); setProgress(1); setStage('done');
+      // keep the real audio playable + save it to Recordings (this session)
+      try {
+        const url = URL.createObjectURL(file);
+        setClipUrl(url);
+        const source = /^Live recording/.test(file.name) ? 'listen' : 'upload';
+        addClip({ id: 'clip-' + Date.now(), name: r.name, url, durSec: r.duration, peaks: r.peaks, source, analysis: r, ts: Date.now() });
+      } catch (e) {}
       // optional: natural-language summary via Claude if available
       if (window.claude && typeof window.claude.complete === 'function') {
         try {
@@ -201,6 +209,13 @@ function Analyze() {
     clearInterval(recTimerRef.current); stopTracks(); reset();
   };
   React.useEffect(() => () => { clearInterval(recTimerRef.current); stopTracks(); }, []);
+
+  // open a saved recording's insights (navigated from Recordings)
+  React.useEffect(() => {
+    if (!viewClip) return;
+    setRes(viewClip.analysis); setClipUrl(viewClip.url); setAiSummary(''); setStage('done');
+    setViewClip(null);
+  }, [viewClip]);
 
   return (
     <div className="page">
@@ -277,12 +292,30 @@ function Analyze() {
         </div>
       )}
 
-      {stage==='done' && res && <AnalyzeResults res={res} aiSummary={aiSummary} mode={mode} />}
+      {stage==='done' && res && <AnalyzeResults res={res} aiSummary={aiSummary} mode={mode} clipUrl={clipUrl} planAllows={planAllows} go={go} />}
     </div>
   );
 }
 
-function AnalyzeResults({ res, aiSummary, mode }) {
+// honest, rule-based coaching derived from the REAL acoustic measurements
+function speakingInsights(r) {
+  const tr = Math.round(r.talkRatio * 100);
+  const out = [];
+  out.push(r.wpm > 175
+    ? { ic:'bolt', title:`Brisk pace · ~${r.wpm} wpm`, body:'You’re speaking quickly. Slowing slightly on key points helps listeners absorb them.' }
+    : r.wpm < 120
+    ? { ic:'clock', title:`Measured pace · ~${r.wpm} wpm`, body:'Calm and deliberate — good for clarity. Add a little energy on highlights to keep momentum.' }
+    : { ic:'bolt', title:`Steady pace · ~${r.wpm} wpm`, body:'A comfortable, easy-to-follow speaking rate.' });
+  out.push(r.pauses === 0
+    ? { ic:'wave', title:'Very few pauses', body:'You rarely paused. Intentional pauses give your points room to land and read as confidence.' }
+    : { ic:'pause', title:`${r.pauses} notable pause${r.pauses>1?'s':''}`, body:`Longest was ${r.longestPause.toFixed(1)}s. Well-placed pauses make you sound composed and in control.` });
+  out.push({ ic:'mic', title:`${tr}% active voice`, body: tr>=70 ? 'Mostly speech with little dead air.' : tr>=45 ? 'A balanced mix of talking and quiet/listening.' : 'Lots of quiet — reflective, lighter on spoken content.' });
+  out.push({ ic:'spark', title: r.expressiveness>55?'Animated delivery':r.expressiveness>30?'Balanced energy':'Calm, level tone',
+    body:`Expressiveness ${r.expressiveness}/100 — ${r.expressiveness>55?'lively variation keeps attention.':r.expressiveness>30?'a steady, grounded feel.':'try adding vocal variety on points you want to emphasize.'}` });
+  return out;
+}
+
+function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
   const metrics = [
     { label:'Duration', value:fmtTime(res.duration), ic:'clock' },
     { label:'Active voice', value:`${Math.round(res.talkRatio*100)}%`, ic:'wave', sub:'talk vs. silence' },
@@ -305,11 +338,15 @@ function AnalyzeResults({ res, aiSummary, mode }) {
           </div>
           <Badge kind="good" dot>Analyzed locally</Badge>
         </div>
-        <RealWave peaks={res.peaks} />
-        <div className="row" style={{ justifyContent:'space-between', marginTop:8 }}>
-          <span className="faint tnum" style={{ fontSize:11.5 }}>0:00</span>
-          <span className="faint tnum" style={{ fontSize:11.5 }}>{fmtTime(res.duration)}</span>
-        </div>
+        {clipUrl
+          ? <RealPlayer src={clipUrl} peaks={res.peaks} durSec={res.duration} />
+          : (<>
+              <RealWave peaks={res.peaks} />
+              <div className="row" style={{ justifyContent:'space-between', marginTop:8 }}>
+                <span className="faint tnum" style={{ fontSize:11.5 }}>0:00</span>
+                <span className="faint tnum" style={{ fontSize:11.5 }}>{fmtTime(res.duration)}</span>
+              </div>
+            </>)}
         <div className="card" style={{ marginTop:16, padding:'14px 16px', background:'var(--surface-2)', display:'flex', gap:12, alignItems:'flex-start' }}>
           <span className="center" style={{ width:30, height:30, borderRadius:9, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }}><Icon name="spark" size={16} /></span>
           <div className="stack" style={{ gap:4 }}>
@@ -329,6 +366,32 @@ function AnalyzeResults({ res, aiSummary, mode }) {
           </div>
         ))}
       </div>
+
+      {/* deeper speaking insights — Plus */}
+      {planAllows && planAllows('plus') ? (
+        <Panel title="Speaking insights" sub="A coaching read from your real acoustics">
+          <div className="grid g-2">
+            {speakingInsights(res).map((it,i)=>(
+              <div key={i} className="row" style={{ gap:11, padding:'12px 14px', borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)', alignItems:'flex-start' }}>
+                <span className="center" style={{ width:34, height:34, borderRadius:10, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name={it.ic} size={17} /></span>
+                <div className="stack" style={{ gap:2, minWidth:0 }}>
+                  <span style={{ fontWeight:650, fontSize:13.5 }}>{it.title}</span>
+                  <span className="faint" style={{ fontSize:12.5, lineHeight:1.5 }}>{it.body}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : (
+        <div className="card card-pad" style={{ background:'var(--accent-soft)', border:'1px solid color-mix(in srgb,var(--accent) 22%,transparent)' }}>
+          <div className="row" style={{ gap:11, marginBottom:8 }}>
+            <span className="center" style={{ width:34, height:34, borderRadius:10, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }}><Icon name="spark" size={17} fill /></span>
+            <span style={{ fontWeight:700, fontSize:15 }}>Unlock deeper speaking insights with Plus</span>
+          </div>
+          <p className="muted" style={{ margin:'0 0 12px', fontSize:13.5, lineHeight:1.6 }}>Plus turns these measurements into coaching — pace, pausing, energy and talk-balance guidance tuned to this recording. Your audio still stays on your device.</p>
+          <button className="btn btn-primary btn-sm" onClick={()=>go && go('pricing')}><Icon name="spark" size={14} fill />See Plus</button>
+        </div>
+      )}
 
       {/* energy chart + key moments */}
       <div className="grid g-2">
