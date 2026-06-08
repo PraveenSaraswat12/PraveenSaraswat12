@@ -22,23 +22,32 @@ const FONT_MAP = {
   space:      "'Space Grotesk', sans-serif",
 };
 
+// route aliases so friendly URLs resolve instead of falling back (e.g. #plans → pricing)
+const ROUTE_ALIASES = { plans: 'pricing', billing: 'pricing', recordings: 'library', settings: 'privacy' };
+function resolveRoute(r) { return ROUTE_ALIASES[r] || r; }
+
 function AppProvider() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
   // ----- routing -----
   const [route, setRoute] = React.useState(() => {
-    const h = (location.hash || '').replace('#', '');
+    const h = resolveRoute((location.hash || '').replace('#', ''));
     return ROUTES[h] ? h : 'landing';
   });
   const [convoId, setConvoId] = React.useState(null);
+  const [convoFrom, setConvoFrom] = React.useState('dashboard'); // where a deep-dive was opened from
+  const [viewConvo, setViewConvo] = React.useState(null);        // the recording being viewed
   const go = React.useCallback((r, opts = {}) => {
+    r = resolveRoute(r);
     if (opts.convo) setConvoId(opts.convo);
+    if (opts.from) setConvoFrom(opts.from);
+    if (opts.rec !== undefined) setViewConvo(opts.rec);
     setRoute(r);
     try { location.hash = r; } catch (e) {}
     const sc = document.querySelector('.app-scroll'); if (sc) sc.scrollTop = 0;
   }, []);
   React.useEffect(() => {
-    const onHash = () => { const h = (location.hash||'').replace('#',''); if (ROUTES[h]) setRoute(h); };
+    const onHash = () => { const h = resolveRoute((location.hash||'').replace('#','')); if (ROUTES[h]) setRoute(h); };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
@@ -104,6 +113,7 @@ function AppProvider() {
     plus, setPlus, plan, setPlan, planAllows, wiped, setWiped, toast, showToast, perms, savePerms,
     sidebarCollapsed, setSidebarCollapsed,
     clips, addClip, removeClip, viewClip, setViewClip,
+    convoFrom, viewConvo, setViewConvo,
   };
 
   // ----- apply tokens to root -----

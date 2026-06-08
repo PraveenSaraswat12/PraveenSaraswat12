@@ -267,7 +267,7 @@ function Library() {
               </button>
               <div className="lib-wave"><Waveform bars={22} seed={r.seed} height={30} gap={2} color={isPlaying?'var(--accent)':'var(--line-2)'} /></div>
               <button className="stack grow lib-open" style={{ gap:3, minWidth:0, textAlign:'left' }}
-                onClick={()=> isPremium ? go('conversation',{convo:r.id}) : (r.analyzed ? go('conversation',{convo:r.id}) : go('pricing'))}
+                onClick={()=> isPremium ? go('conversation',{convo:r.id, from:'library', rec:r}) : (r.analyzed ? go('conversation',{convo:r.id, from:'library', rec:r}) : go('pricing'))}
                 title={isPremium?'Open insights for this recording':''}>
                 <div className="row" style={{ gap:8, minWidth:0 }}>
                   <span style={{ fontWeight:650, fontSize:14, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.title}</span>
@@ -291,12 +291,12 @@ function Library() {
                 <div className="row" style={{ gap:6, flex:'none' }}>
                   <button className="btn btn-soft btn-sm btn-icon" title="Download recording" onClick={()=>showToast(`Downloading “${r.title}”…`,'download')}><Icon name="download" size={15} /></button>
                   <button className="btn btn-soft btn-sm btn-icon" title="Talk about this recording" onClick={()=>{ showToast(`Opening agent for “${r.title}”`,'mic'); go('ask'); }}><Icon name="mic" size={15} /></button>
-                  <button className="btn btn-soft btn-sm" onClick={()=>go('conversation',{convo:r.id})}>Insights<Icon name="chevR" size={14} /></button>
+                  <button className="btn btn-soft btn-sm" onClick={()=>go('conversation',{convo:r.id, from:'library', rec:r})}>Insights<Icon name="chevR" size={14} /></button>
                 </div>
               ) : (
                 <div className="row" style={{ gap:6, flex:'none' }}>
                   <button className="btn btn-soft btn-sm btn-icon" title="Download recording" onClick={()=>showToast(`Downloading “${r.title}”…`,'download')}><Icon name="download" size={15} /></button>
-                  <button className="btn btn-soft btn-sm" onClick={()=> r.analyzed ? go('conversation',{convo:r.id}) : go('pricing')}>
+                  <button className="btn btn-soft btn-sm" onClick={()=> r.analyzed ? go('conversation',{convo:r.id, from:'library', rec:r}) : go('pricing')}>
                     {r.analyzed ? <>Insights<Icon name="chevR" size={14} /></> : <><Icon name="lock" size={13} />Analyze</>}
                   </button>
                 </div>
@@ -394,7 +394,7 @@ function LibPlayer({ rec, onClose, go }) {
       </div>
       <div className="grow" style={{ minWidth:0 }}><Waveform bars={84} seed={rec.seed} height={34} gap={2} progress={prog} /></div>
       <span className="tnum faint" style={{ fontSize:12, flex:'none', width:88, textAlign:'right' }}>{fmtDur(prog*rec.durSec)} / {fmtDur(rec.durSec)}</span>
-      <button className="btn btn-soft btn-sm" style={{ flex:'none' }} onClick={()=> rec.analyzed ? go('conversation') : go('pricing')}>{rec.analyzed?'Open':'Analyze'}</button>
+      <button className="btn btn-soft btn-sm" style={{ flex:'none' }} onClick={()=> rec.analyzed ? go('conversation',{convo:rec.id, from:'library', rec}) : go('pricing')}>{rec.analyzed?'Open':'Analyze'}</button>
       <button className="btn btn-icon btn-ghost btn-sm" style={{ flex:'none' }} onClick={onClose} aria-label="Close"><Icon name="x" size={15} /></button>
     </div>
   );

@@ -177,7 +177,7 @@ function DashBusiness({ data }) {
           <Panel title="Recent calls" pad={false} style={{ overflow:'hidden' }}>
             <div style={{ padding:'0 var(--pad-card)' }}><div className="sec-title" style={{ paddingTop:'var(--pad-card)' }}><div className="stack" style={{ gap:2 }}><h3>Recent calls</h3></div><button className="btn btn-soft btn-sm" onClick={()=>go('sources')}>All</button></div></div>
             <div style={{ padding:'0 var(--pad-card) 6px' }}>
-              {data.recent.slice(0,4).map((c,i)=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id})} />)}
+              {data.recent.slice(0,4).map((c,i)=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id, from:'dashboard', rec:c})} />)}
             </div>
           </Panel>
         </div>
@@ -283,7 +283,7 @@ function DashPersonal({ data }) {
           <Panel title="Recent reflections" pad={false}>
             <div style={{ padding:'var(--pad-card) var(--pad-card) 6px' }}>
               <div className="sec-title"><div className="stack" style={{ gap:2 }}><h3>Recent reflections</h3></div></div>
-              {data.recent.slice(0,4).map((c)=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id})} />)}
+              {data.recent.slice(0,4).map((c)=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id, from:'dashboard', rec:c})} />)}
             </div>
           </Panel>
         </div>

@@ -11,15 +11,107 @@ const ANN = {
   shift:    { k:'warn', c:'var(--warn)', bg:'var(--warn-soft)', ic:'wave' },
 };
 
+function hashId(s){ let h=0; s=String(s||''); for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return h; }
+function parseDur(s){ if(!s||typeof s!=='string') return 0; const p=s.split(':').map(Number); return p.length===2 && p.every(n=>!isNaN(n)) ? p[0]*60+p[1] : 0; }
+function fmtDurS(s){ return `${Math.floor((s||0)/60)}:${String(Math.floor((s||0)%60)).padStart(2,'0')}`; }
+
+// a few coherent transcripts per mode — picked per-recording so each row opens its own deep-dive
+const SCRIPTS = {
+  business: [
+    [
+      { t:'00:42', who:'You', side:'rep', text:'Before we talk numbers — what would make this an easy yes for your team?' },
+      { t:'00:58', who:'Them', side:'cust', text:'The value’s clear. It’s really about the budget we set for this quarter.', tag:{k:'objection',l:'Objection — budget'} },
+      { t:'02:14', who:'You', side:'rep', text:'Fair. A similar team started with two regions and expanded once it paid for itself.', tag:{k:'pos',l:'Peer story'} },
+      { t:'02:51', who:'Them', side:'cust', text:'Interesting — how fast did they see a return?', tag:{k:'signal',l:'Buying signal'} },
+      { t:'03:20', who:'You', side:'rep', text:'About six weeks. I’ll put the exact numbers in a one-pager you can forward up.' },
+      { t:'06:10', who:'Them', side:'cust', text:'My only worry is getting my VP on board before quarter-end.', tag:{k:'shift',l:'New stakeholder'} },
+      { t:'06:32', who:'You', side:'rep', text:'Let’s get 20 minutes with them next week — I’ll handle the ROI part.' },
+    ],
+    [
+      { t:'01:05', who:'You', side:'rep', text:'What’s working and not working with your current setup?' },
+      { t:'01:30', who:'Them', side:'cust', text:'Honestly we’re fairly locked in with what we use today.', tag:{k:'objection',l:'Competitor lock-in'} },
+      { t:'03:12', who:'You', side:'rep', text:'Most teams kept theirs and ran us alongside for the gaps.', tag:{k:'pos',l:'Reframe'} },
+      { t:'04:40', who:'Them', side:'cust', text:'Does it actually integrate with our stack, though?', tag:{k:'signal',l:'Technical interest'} },
+      { t:'05:02', who:'You', side:'rep', text:'Yes — native connectors, and I’ll have our SE confirm your exact tools.' },
+      { t:'08:18', who:'Them', side:'cust', text:'If the integration is clean, this could be worth piloting.', tag:{k:'pos',l:'Positive shift'} },
+      { t:'09:01', who:'You', side:'rep', text:'Let’s scope a two-week pilot on one team — low risk, clear metric.' },
+    ],
+    [
+      { t:'00:50', who:'You', side:'rep', text:'Where does solving this sit on your priorities right now?' },
+      { t:'01:12', who:'Them', side:'cust', text:'It matters, but it might be a next-quarter thing for us.', tag:{k:'objection',l:'No urgency'} },
+      { t:'02:35', who:'You', side:'rep', text:'What changes for the team if it slips a quarter?', tag:{k:'signal',l:'Cost of inaction'} },
+      { t:'02:58', who:'Them', side:'cust', text:'We’d keep losing time on manual reviews — which is the whole problem.', tag:{k:'pos',l:'Pain quantified'} },
+      { t:'05:20', who:'You', side:'rep', text:'Then even a small start now pays for itself before next quarter begins.' },
+      { t:'06:45', who:'Them', side:'cust', text:'Send me something I can take to the team this week.', tag:{k:'shift',l:'Next step'} },
+      { t:'07:02', who:'You', side:'rep', text:'Done — a one-pager today, and let’s hold time Thursday to decide.' },
+    ],
+  ],
+  personal: [
+    [
+      { t:'00:20', who:'You', side:'rep', text:'Sorry, I know this is probably a bad time to bring this up…', tag:{k:'shift',l:'Reflex apology'} },
+      { t:'00:38', who:'Them', side:'cust', text:'It’s fine. What’s going on?' },
+      { t:'01:55', who:'You', side:'rep', text:'I felt like I wasn’t being heard earlier and it got to me.', tag:{k:'objection',l:'Tension rising'} },
+      { t:'03:12', who:'You', side:'rep', text:'…okay. Can you help me understand how it looked from your side?', tag:{k:'pos',l:'Asked, not defended'} },
+      { t:'03:40', who:'Them', side:'cust', text:'Yeah — I think we both got defensive too fast.' },
+      { t:'04:18', who:'You', side:'rep', text:'That’s fair. I want to get this right.', tag:{k:'pos',l:'Tone softened'} },
+      { t:'07:02', who:'You', side:'rep', text:'I get short when I’m tired — that’s on me.', tag:{k:'signal',l:'Self-awareness'} },
+    ],
+    [
+      { t:'00:15', who:'You', side:'rep', text:'Thinking out loud on the walk — what actually matters today.' },
+      { t:'00:48', who:'You', side:'rep', text:'I keep circling the same project; there’s real energy there.', tag:{k:'pos',l:'Motivation'} },
+      { t:'02:05', who:'You', side:'rep', text:'But I’m tense about the calendar — too many things stacked.', tag:{k:'objection',l:'Overwhelm'} },
+      { t:'03:30', who:'You', side:'rep', text:'One thing at a time. What’s the single next step?', tag:{k:'signal',l:'Self-coaching'} },
+      { t:'04:10', who:'You', side:'rep', text:'Block the morning for the deep work, and protect it.', tag:{k:'pos',l:'Plan'} },
+      { t:'05:00', who:'You', side:'rep', text:'And say no to the 4pm if it’s not essential.' },
+      { t:'05:40', who:'You', side:'rep', text:'Good. That feels lighter already.', tag:{k:'pos',l:'Tone lifted'} },
+    ],
+    [
+      { t:'00:30', who:'You', side:'rep', text:'Hey — sorry it’s been a while, things have been full on.', tag:{k:'shift',l:'Reflex apology'} },
+      { t:'00:52', who:'Them', side:'cust', text:'It’s okay. Tell me how you actually are.' },
+      { t:'02:10', who:'You', side:'rep', text:'Honestly, a bit stretched. But better for hearing your voice.', tag:{k:'pos',l:'Warmth'} },
+      { t:'03:25', who:'Them', side:'cust', text:'You always take too much on. Are you resting?' },
+      { t:'03:48', who:'You', side:'rep', text:'Not enough. I’m working on it — earlier nights this week.', tag:{k:'signal',l:'Honesty'} },
+      { t:'05:15', who:'You', side:'rep', text:'Let’s do this properly — same time next week?', tag:{k:'pos',l:'Commitment'} },
+      { t:'05:38', who:'Them', side:'cust', text:'I’d love that.' },
+    ],
+  ],
+};
+
+// build a deep-dive bound to the clicked recording (falls back to the sample transcript)
+function buildDeepDive(rec, mode) {
+  const fallback = window.LUMEN.transcript[mode];
+  if (!rec) return fallback;
+  const h = hashId(rec.id || rec.title);
+  const pool = SCRIPTS[mode] || SCRIPTS.business;
+  const lines = pool[h % pool.length];
+  const sentMap = { pos: 0.38, neu: -0.02, neg: -0.32 };
+  const sentiment = Math.max(-0.8, Math.min(0.8, (sentMap[rec.sent] ?? 0.12) + ((h % 7) - 3) / 100));
+  const who = rec.person || rec.who || (mode === 'business' ? 'the other side' : 'them');
+  const dur = rec.dur || (rec.durSec != null ? fmtDurS(rec.durSec) : '');
+  const meta = [who, dur, rec.when].filter(Boolean).join(' · ');
+  const title = rec.title || fallback.title;
+  const lead = String(title).split('—')[0].trim();
+  const tldr = mode === 'business'
+    ? `${lead} is engaged${sentiment >= 0.2 ? ' and leaning in' : ', weighing real concerns'}. The clearest path forward is to address the open objection and lock a concrete next step while interest is high.`
+    : `A ${sentiment >= 0.2 ? 'warm, open' : 'tense but honest'} conversation. The turning point was slowing down and asking instead of reacting — your tone softened from there.`;
+  const actions = mode === 'business'
+    ? ['Send a tailored follow-up referencing what mattered most', 'Confirm the next step on the calendar before end of week', 'Loop in a second stakeholder to de-risk the deal']
+    : ['Notice the moment your tone shifted', 'Try the pause earlier next time', 'Revisit when rested — energy shapes the conversation'];
+  const next = mode === 'business'
+    ? 'Strike while sentiment is high: send the follow-up today and propose a specific time for the next conversation.'
+    : 'You did the hard part. Next time, bring the calm you found at the end to the very start.';
+  return { title, meta, tldr, sentiment, actions, next, lines };
+}
+
 function Conversation() {
-  const { go, mode, showToast } = useApp();
-  const t = window.LUMEN.transcript[mode];
+  const { go, mode, showToast, viewConvo, convoFrom } = useApp();
+  const t = React.useMemo(() => buildDeepDive(viewConvo, mode), [viewConvo, mode]);
   const [playing, setPlaying] = React.useState(false);
   const [prog, setProg] = React.useState(0.34);
   const [tab, setTab] = React.useState('all');
   const [expanded, setExpanded] = React.useState(false);
   const [doneItems, setDoneItems] = React.useState(()=>new Set());
-  const totalSec = 1934; // ~32min display
+  const totalSec = (viewConvo && (viewConvo.durSec || parseDur(viewConvo.dur))) || 1934;
 
   React.useEffect(() => {
     if (!playing) return;
@@ -39,7 +131,7 @@ function Conversation() {
   return (
     <div className="page">
       <div className="row" style={{ gap:12, marginBottom:18 }}>
-        <button className="btn btn-icon btn-ghost" onClick={()=>go('dashboard')} aria-label="Back"><Icon name="chevL" size={18} /></button>
+        <button className="btn btn-icon btn-ghost" onClick={()=>go(convoFrom||'dashboard')} aria-label="Back"><Icon name="chevL" size={18} /></button>
         <div className="stack" style={{ gap:2 }}>
           <span className="eyebrow">{mode==='business'?'Conversation':'Reflection'} deep-dive</span>
           <h1 className="display" style={{ fontSize:24, margin:0 }}>{t.title}</h1>
@@ -61,7 +153,7 @@ function Conversation() {
             <div className="row" style={{ justifyContent:'space-between', marginTop:10 }}>
               <span className="row" style={{ gap:10 }}>
                 <span className="tnum" style={{ fontSize:12.5, fontWeight:600 }}>{cur}</span>
-                <span className="faint tnum" style={{ fontSize:12.5 }}>/ 32:14</span>
+                <span className="faint tnum" style={{ fontSize:12.5 }}>/ {fmt(totalSec)}</span>
               </span>
               <span className="faint" style={{ fontSize:12.5 }}>{t.meta}</span>
             </div>

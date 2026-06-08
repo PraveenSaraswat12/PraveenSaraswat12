@@ -101,7 +101,8 @@ function Patterns() {
     const tot = raw.reduce((a,b)=>a+b.w,0) || 1;
     return raw.map(it=>({ ...it, share: Math.max(3, Math.round(it.w/tot*100)) }));
   }, [sig]);
-  const mixItems = reweight((isBiz?data.objections:data.themes).slice(0,5));
+  // sort by share so the donut centre (mixItems[0]) and legend agree on the true top item
+  const mixItems = reweight((isBiz?data.objections:data.themes).slice(0,5)).sort((a,b)=>b.share-a.share);
 
   // tangible "matches" count
   const base = isBiz ? 1000 : 24;
