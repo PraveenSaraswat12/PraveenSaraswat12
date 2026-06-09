@@ -19,6 +19,7 @@ function Pricing() {
         ['layers','Recordings library + playback'],
         ['clock','60-day storage · 2 GB'],
         ['calendar','Date & length filters'],
+        ['book','Browse the 100+ book library'],
         ['chat','Ask Kithra — 10 questions / month'],
       ],
       note:'Mobile only. No card required.',
@@ -32,6 +33,7 @@ function Pricing() {
         ['grid','Web & desktop app (capture anywhere)'],
         ['layers','30 GB storage · 180-day retention'],
         ['spark','AI categories, topics & tone filters'],
+        ['book','Book summaries & key ideas (100+ books)'],
         ['chat','Unlimited Ask Kithra + voice agent'],
         ['download','Download & bulk-download recordings'],
         ['file','Transcript download'],
@@ -45,6 +47,7 @@ function Pricing() {
       features:[
         ['check','Everything in Plus, plus:'],
         ['user','People & relationship filters'],
+        ['book','Read full books in-app (public-domain)'],
         ['spark','Insights on any recording — just tap'],
         ['mic','Talk to the agent about any recording'],
         ['layers','Unlimited storage & retention'],
