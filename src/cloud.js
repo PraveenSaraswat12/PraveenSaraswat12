@@ -72,6 +72,23 @@ const Cloud = {
     if (j.error) throw new Error(j.error);
     return j.text || '';
   },
+
+  // accurate transcription via the Edge Function (Gemini multimodal)
+  async transcribe(audioBase64, opts = {}) {
+    const cfg = getConfig(); if (!cfg) throw new Error('Cloud not configured');
+    const c = await getClient();
+    let token = cfg.SUPABASE_ANON_KEY;
+    try { const { data } = await c.auth.getSession(); if (data?.session?.access_token) token = data.session.access_token; } catch (e) {}
+    const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': cfg.SUPABASE_ANON_KEY },
+      body: JSON.stringify({ audio: audioBase64, mimeType: opts.mimeType || 'audio/wav', language: opts.language, context: opts.context }),
+    });
+    if (!res.ok) throw new Error('Transcription failed (' + res.status + ')');
+    const j = await res.json();
+    if (j.error) throw new Error(j.error);
+    return j.text || '';
+  },
 };
 
 if (typeof window !== 'undefined') window.KithraCloud = Cloud;

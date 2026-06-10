@@ -14,6 +14,7 @@ import './styles/screens.css';
 // Mock data + Web-Speech voice helper — set window.LUMEN / window.LumenVoice.
 import './data.js';
 import './voice.js';
+import './app-config.js'; // built-in Supabase project keys (anon = public)
 import './cloud.js'; // optional Supabase + Gemma backend (inert until connected)
 
 // Pull every screen into the graph (mirrors the prototype's load order) so the

@@ -354,6 +354,20 @@ async function to16kMono(src) {
   const rendered = await off.startRendering();
   return rendered.getChannelData(0);
 }
+// encode a Float32 PCM array as a base64 16-bit WAV (for cloud/Gemini transcription)
+function floatToWavBase64(float32, sr) {
+  const n = float32.length;
+  const buf = new ArrayBuffer(44 + n * 2);
+  const dv = new DataView(buf);
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true);
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
+  let o = 44; for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, float32[i])); dv.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); o += 2; }
+  const bytes = new Uint8Array(buf); let bin = ''; const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
 function transcriptInsights(text, durSec) {
   const words = text.match(/[A-Za-z0-9’']+/g) || [];
   const wc = words.length;
@@ -368,17 +382,33 @@ function TranscriptPanel({ clipUrl, durSec }) {
   const [prog, setProg] = React.useState(0);
   const [err, setErr] = React.useState('');
   const [lang, setLang] = React.useState(''); // '' = auto-detect
+  const [ctx, setCtx] = React.useState(''); // names/terms to spell right
+  const [engine, setEngine] = React.useState('');
+  const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
   const run = async () => {
     if (!clipUrl) return;
-    setState('loading'); setProg(0); setErr('');
+    setErr('');
     try {
+      if (cloudOn) {
+        // accurate cloud transcription (Google Gemini): decode → 16kHz WAV → send
+        setState('running'); setEngine('Kithra Cloud · Google');
+        const audio = await to16kMono(clipUrl);
+        const b64 = floatToWavBase64(audio, 16000);
+        const t = await window.KithraCloud.transcribe(b64, { mimeType: 'audio/wav', language: lang || undefined, context: ctx || undefined });
+        setText((t || '').trim()); setState('done');
+        return;
+      }
+      // on-device fallback (Whisper)
+      setState('loading'); setProg(0); setEngine('On-device');
       const transcriber = await getTranscriber((p) => { if (p && typeof p.progress === 'number') setProg(p.progress); });
       setState('running');
       const audio = await to16kMono(clipUrl);
       const out = await transcriber(audio, { chunk_length_s: 30, stride_length_s: 5, language: lang || undefined, task: 'transcribe' });
       setText(((out && out.text) || '').trim()); setState('done');
     } catch (e) {
-      setErr('Couldn’t run on-device transcription here. It needs a modern browser (Chrome works best) and a moment to download the AI model the first time — please try again.');
+      setErr(cloudOn
+        ? 'Cloud transcription failed: ' + (e && e.message ? e.message : e) + '. Make sure the AI function is deployed, then try again.'
+        : 'Couldn’t run on-device transcription here. Try Chrome with a stable connection.');
       setState('error');
     }
   };
@@ -402,15 +432,22 @@ function TranscriptPanel({ clipUrl, durSec }) {
       </select>
     </label>
   );
+  const ctxInput = (
+    <input className="field" value={ctx} onChange={(e) => setCtx(e.target.value)}
+      placeholder="Names / terms to spell right (e.g. Praveen, Houston, ATS)"
+      style={{ height: 34, flex: '1 1 240px', minWidth: 180 }} />
+  );
   return (
-    <Panel title="Transcript" sub="Real speech-to-text — runs privately on your device, no upload">
+    <Panel title="Transcript" sub={cloudOn ? 'Accurate transcription via Google Gemini' : 'Runs privately on your device, no upload'}>
       {state === 'idle' && (
         <div className="stack" style={{ gap: 12 }}>
-          <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>Turn this recording into text with a multilingual on-device AI model (English, Hindi, Spanish and many more). The first run downloads the model once (~145&nbsp;MB) and can take a moment; after that it’s cached.</p>
-          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            {langSelect}
-            <button className="btn btn-primary btn-sm" onClick={run}><Icon name="spark" size={14} fill />Transcribe with on-device AI</button>
-          </div>
+          <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>
+            {cloudOn
+              ? 'High-accuracy cloud transcription (Google Gemini), great with accents and names. Add any names or terms below so they’re spelled correctly.'
+              : 'On-device transcription (private, works offline). The first run downloads a model (~145 MB). For best accuracy, connect the cloud in Privacy → Cloud & account.'}
+          </p>
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}</div>
+          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn ? 'Transcribe (accurate)' : 'Transcribe with on-device AI'}</button>
         </div>
       )}
       {state === 'loading' && (
@@ -427,18 +464,16 @@ function TranscriptPanel({ clipUrl, durSec }) {
       )}
       {state === 'done' && (
         <div className="stack" style={{ gap: 14 }}>
-          {ins && (
-            <div className="row wrap" style={{ gap: 8 }}>
-              <span className="tag"><Icon name="file" size={12} />{ins.wc} words</span>
+          <div className="row wrap" style={{ gap: 8 }}>
+            {engine && <span className="badge badge-good" style={{ height: 22 }}><Icon name="spark" size={11} fill />{engine}</span>}
+            {ins && <><span className="tag"><Icon name="file" size={12} />{ins.wc} words</span>
               <span className="tag"><Icon name="bolt" size={12} />{ins.wpm} wpm spoken</span>
-              {ins.fillers > 0 && <span className="tag"><Icon name="wave" size={12} />{ins.fillers} filler{ins.fillers > 1 ? 's' : ''}</span>}
-            </div>
-          )}
+              {ins.fillers > 0 && <span className="tag"><Icon name="wave" size={12} />{ins.fillers} filler{ins.fillers > 1 ? 's' : ''}</span>}</>}
+          </div>
           <div className="card" style={{ padding: '14px 16px', background: 'var(--surface-2)', maxHeight: 240, overflow: 'auto' }}>
             <p style={{ margin: 0, fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{text || '(No clear speech detected in this audio.)'}</p>
           </div>
-          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            {langSelect}
+          <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}
             <button className="btn btn-soft btn-sm" onClick={run}><Icon name="refresh" size={14} />Re-run</button>
           </div>
         </div>
