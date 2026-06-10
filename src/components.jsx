@@ -261,6 +261,15 @@ function EvidenceList({ items, label = 'Informed by' }) {
   );
 }
 
+/* ---------- PII redaction (masks emails, phones, long numbers) ---------- */
+function redactPII(text) {
+  if (!text) return text;
+  return String(text)
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
+    .replace(/(?:\+?\d[\d\s\-().]{7,}\d)/g, (m) => (m.replace(/\D/g, '').length >= 8 ? '[phone]' : m))
+    .replace(/\b\d{6,}\b/g, '[number]');
+}
+
 /* ---------- Real audio player (plays an actual uploaded/recorded file) ---------- */
 function RealPlayer({ src, peaks, durSec = 0, accent = 'var(--accent)' }) {
   const ref = React.useRef(null);
@@ -296,8 +305,8 @@ function RealPlayer({ src, peaks, durSec = 0, accent = 'var(--accent)' }) {
 
 Object.assign(window, {
   Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights,
-  Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer,
+  Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer, redactPII,
 });
 
 
-export { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer };
+export { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer, redactPII };

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Icon, RealPlayer, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { createPortal } from 'react-dom';
+import { Icon, RealPlayer, redactPII, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 import { Panel } from './screens-dashboard.jsx';
 /* ============================================================
    LUMEN — Real audio upload + in-browser acoustic analysis
@@ -179,7 +180,10 @@ function Analyze() {
 
   // ---- live recording (MediaRecorder → same in-browser analysis) ----
   const stopTracks = () => { try { streamRef.current?.getTracks().forEach(t => t.stop()); } catch (e) {} streamRef.current = null; };
-  const startRecording = async () => {
+  const startRecording = async (acked) => {
+    // one-time reminder: recording other people needs their consent (DPDP etc.)
+    let seen = false; try { seen = localStorage.getItem('kithra_rec_ack') === '1'; } catch (e) {}
+    if (!acked && !seen) { setStage('recnotice'); return; }
     setErr('');
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
       setErr('Recording isn’t supported in this browser — try uploading a file instead.'); setStage('error'); return;
@@ -261,6 +265,23 @@ function Analyze() {
               <p className="faint" style={{ fontSize:13, margin:0 }}>Decoding samples · reading energy, pacing & pauses</p>
             </div>
             <div className="bar" style={{ height:8, width:240 }}><i style={{ width:`${Math.round(progress*100)}%`, transition:'width .2s linear' }} /></div>
+          </div>
+        </div>
+      )}
+
+      {stage==='recnotice' && (
+        <div className="card card-pad center" style={{ minHeight:240, textAlign:'center' }}>
+          <div className="stack center" style={{ gap:14, maxWidth:440 }}>
+            <span className="center" style={{ width:48, height:48, borderRadius:14, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="shield" size={24} /></span>
+            <h3 className="display" style={{ fontSize:21, margin:0 }}>Before you record</h3>
+            <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.6 }}>
+              Voice is personal data. If this recording will include <strong>other people</strong>, the law in India (DPDP Act) and many other places requires their <strong>informed consent</strong> first. Recording just yourself? You’re good to go.
+            </p>
+            <div className="row center" style={{ gap:10 }}>
+              <button className="btn btn-primary" onClick={()=>{ try{ localStorage.setItem('kithra_rec_ack','1'); }catch(e){} startRecording(true); }}><Icon name="check" size={16} />I understand — record</button>
+              <button className="btn btn-ghost" onClick={()=>setStage('idle')}>Cancel</button>
+            </div>
+            <button className="linkbtn" style={{ fontSize:12 }} onClick={()=>go('legal')}>Read the recording policy</button>
           </div>
         </div>
       )}
@@ -384,33 +405,44 @@ function TranscriptPanel({ clipUrl, durSec }) {
   const [lang, setLang] = React.useState(''); // '' = auto-detect
   const [ctx, setCtx] = React.useState(''); // names/terms to spell right
   const [engine, setEngine] = React.useState('');
+  const [askConsent, setAskConsent] = React.useState(false);
+  const { hasConsent, grantConsent, redact } = useApp();
   const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
+  const [useCloud, setUseCloud] = React.useState(cloudOn); // engine choice, user-visible
+  const finish = (t) => { setText(redact ? redactPII((t || '').trim()) : (t || '').trim()); setState('done'); };
+  const runCloud = async () => {
+    setState('running'); setEngine('Cloud · Google');
+    const audio = await to16kMono(clipUrl);
+    const b64 = floatToWavBase64(audio, 16000);
+    const t = await window.KithraCloud.transcribe(b64, { mimeType: 'audio/wav', language: lang || undefined, context: ctx || undefined });
+    try { const m = 'kithra_cloud_uses_' + new Date().toISOString().slice(0,7); localStorage.setItem(m, String((Number(localStorage.getItem(m))||0)+1)); } catch (e) {}
+    finish(t);
+  };
+  const runLocal = async () => {
+    setState('loading'); setProg(0); setEngine('On-device');
+    const transcriber = await getTranscriber((p) => { if (p && typeof p.progress === 'number') setProg(p.progress); });
+    setState('running');
+    const audio = await to16kMono(clipUrl);
+    const out = await transcriber(audio, { chunk_length_s: 30, stride_length_s: 5, language: lang || undefined, task: 'transcribe' });
+    finish(out && out.text);
+  };
   const run = async () => {
     if (!clipUrl) return;
     setErr('');
-    try {
-      if (cloudOn) {
-        // accurate cloud transcription (Google Gemini): decode → 16kHz WAV → send
-        setState('running'); setEngine('Kithra Cloud · Google');
-        const audio = await to16kMono(clipUrl);
-        const b64 = floatToWavBase64(audio, 16000);
-        const t = await window.KithraCloud.transcribe(b64, { mimeType: 'audio/wav', language: lang || undefined, context: ctx || undefined });
-        setText((t || '').trim()); setState('done');
-        return;
-      }
-      // on-device fallback (Whisper)
-      setState('loading'); setProg(0); setEngine('On-device');
-      const transcriber = await getTranscriber((p) => { if (p && typeof p.progress === 'number') setProg(p.progress); });
-      setState('running');
-      const audio = await to16kMono(clipUrl);
-      const out = await transcriber(audio, { chunk_length_s: 30, stride_length_s: 5, language: lang || undefined, task: 'transcribe' });
-      setText(((out && out.text) || '').trim()); setState('done');
-    } catch (e) {
-      setErr(cloudOn
-        ? 'Cloud transcription failed: ' + (e && e.message ? e.message : e) + '. Make sure the AI function is deployed, then try again.'
+    const wantCloud = cloudOn && useCloud;
+    // explicit, purpose-limited consent before any audio leaves the device
+    if (wantCloud && !hasConsent('cloud_transcription')) { setAskConsent(true); return; }
+    try { if (wantCloud) await runCloud(); else await runLocal(); }
+    catch (e) {
+      setErr(wantCloud
+        ? 'Cloud transcription failed: ' + (e && e.message ? e.message : e) + '. Make sure the AI function is deployed, or switch to on-device.'
         : 'Couldn’t run on-device transcription here. Try Chrome with a stable connection.');
       setState('error');
     }
+  };
+  const consentAndRun = async () => {
+    grantConsent('cloud_transcription'); setAskConsent(false);
+    try { await runCloud(); } catch (e) { setErr('Cloud transcription failed: ' + (e && e.message ? e.message : e)); setState('error'); }
   };
   const ins = state === 'done' ? transcriptInsights(text, durSec) : null;
   const langSelect = (
@@ -438,16 +470,42 @@ function TranscriptPanel({ clipUrl, durSec }) {
       style={{ height: 34, flex: '1 1 240px', minWidth: 180 }} />
   );
   return (
-    <Panel title="Transcript" sub={cloudOn ? 'Accurate transcription via Google Gemini' : 'Runs privately on your device, no upload'}>
+    <Panel title="Transcript" sub={cloudOn && useCloud ? 'Cloud transcription — opt-in, consent required' : 'Runs privately on your device, no upload'}>
+      {askConsent && createPortal(
+        <div className="lc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setAskConsent(false); }}>
+          <div className="lc-card card" style={{ width: 'min(480px,94vw)' }}>
+            <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+              <span className="center" style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', color: 'var(--accent-strong)', flex: 'none' }}><Icon name="shield" size={18} /></span>
+              <h2 className="display" style={{ fontSize: 20, margin: 0 }}>Send this clip to the cloud?</h2>
+            </div>
+            <p className="muted" style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.6 }}>
+              To transcribe accurately, <strong>this audio clip</strong> will be sent to Kithra’s server and Google’s AI — used <strong>only for transcription</strong>, never for training, and not stored after processing. You can withdraw this consent anytime in <strong>Privacy &amp; Data → Consent</strong>.
+            </p>
+            <p className="faint" style={{ margin: '0 0 14px', fontSize: 12.5, lineHeight: 1.5 }}>If the recording includes other people, make sure they’re okay with it. Prefer full privacy? Use on-device — nothing leaves your device.</p>
+            <div className="stack" style={{ gap: 8 }}>
+              <button className="btn btn-primary btn-lg" onClick={consentAndRun}><Icon name="check" size={16} />Allow &amp; transcribe</button>
+              <button className="btn btn-soft" onClick={() => { setAskConsent(false); setUseCloud(false); runLocal().catch(() => setState('error')); }}>Use on-device instead</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAskConsent(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {state === 'idle' && (
         <div className="stack" style={{ gap: 12 }}>
+          {cloudOn && (
+            <div className="seg" role="tablist" aria-label="Transcription engine" style={{ alignSelf: 'flex-start' }}>
+              <button className={useCloud ? 'on' : ''} onClick={() => setUseCloud(true)} role="tab" aria-selected={useCloud}>Cloud · accurate</button>
+              <button className={!useCloud ? 'on' : ''} onClick={() => setUseCloud(false)} role="tab" aria-selected={!useCloud}>On-device · private</button>
+            </div>
+          )}
           <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>
-            {cloudOn
-              ? 'High-accuracy cloud transcription (Google Gemini), great with accents and names. Add any names or terms below so they’re spelled correctly.'
-              : 'On-device transcription (private, works offline). The first run downloads a model (~145 MB). For best accuracy, connect the cloud in Privacy → Cloud & account.'}
+            {cloudOn && useCloud
+              ? 'High accuracy with accents and names (Google Gemini). Opt-in: you’ll be asked for consent before any audio leaves this device. Add names/terms below so they’re spelled right.'
+              : 'On-device transcription — private, nothing leaves your device. The first run downloads a model (~145 MB).'}
           </p>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}</div>
-          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn ? 'Transcribe (accurate)' : 'Transcribe with on-device AI'}</button>
+          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn && useCloud ? 'Transcribe (accurate)' : 'Transcribe on-device'}</button>
         </div>
       )}
       {state === 'loading' && (

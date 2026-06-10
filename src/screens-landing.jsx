@@ -117,6 +117,11 @@ function Landing() {
       <footer className="lp-foot">
         <Wordmark size={24} />
         <span className="faint" style={{ fontSize:12.5 }}>© 2026 Kithra — conversation intelligence, privately.</span>
+        <span className="row" style={{ gap:14, marginLeft:'auto', flexWrap:'wrap' }}>
+          <button className="linkbtn" style={{ fontSize:12.5 }} onClick={()=>go('legal')}>Privacy Policy</button>
+          <button className="linkbtn" style={{ fontSize:12.5 }} onClick={()=>go('legal')}>Terms</button>
+          <button className="linkbtn" style={{ fontSize:12.5 }} onClick={()=>go('legal')}>Help &amp; contact</button>
+        </span>
       </footer>
     </div>
   );

@@ -69,8 +69,76 @@ function CloudAccount() {
   );
 }
 
+/* ---------- consent ledger + data rights (export / erase) ---------- */
+const PURPOSES = [
+  { k:'cloud_transcription', label:'Cloud transcription', desc:'Send a selected audio clip to the cloud for accurate speech-to-text.' },
+  { k:'cloud_ai', label:'Cloud AI insights', desc:'Send transcript text to the cloud to generate coaching insights.' },
+  { k:'cloud_sync', label:'Account sync', desc:'Store your books & recording metadata in your account.' },
+];
+function ConsentDataPanel() {
+  const { consents, grantConsent, withdrawConsent, books, clips, plan, showToast } = useApp();
+  const [confirmDel, setConfirmDel] = React.useState(false);
+  const fmtAt = (t) => t ? new Date(t).toLocaleString(undefined, { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+  const exportData = () => {
+    const data = {
+      exportedAt: new Date().toISOString(), app: 'Kithra', plan,
+      consents,
+      books,
+      recordings: (clips||[]).map(c => ({ id:c.id, name:c.name, durSec:c.durSec, source:c.source, analysis:c.analysis })),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kithra-data-export.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast('Your data export is downloading', 'download');
+  };
+  const deleteEverything = async () => {
+    try { if (window.KithraCloud && window.KithraCloud.configured()) await window.KithraCloud.deleteAllCloud(); } catch(e){}
+    try {
+      const keep = ['kithra_plan'];
+      Object.keys(localStorage).filter(k => k.indexOf('kithra_') === 0 && keep.indexOf(k) < 0).forEach(k => localStorage.removeItem(k));
+    } catch(e){}
+    location.reload(); // restart clean — local state, clips, consents all gone
+  };
+  return (
+    <Panel title="Consent & your data rights" sub="Purpose-by-purpose consent — documented, withdrawable, no dark patterns">
+      <div className="stack" style={{ gap:10 }}>
+        {PURPOSES.map(p => {
+          const c = consents && consents[p.k];
+          const on = !!(c && c.granted);
+          return (
+            <div key={p.k} className="pv-row">
+              <span className="center" style={{ width:42, height:42, borderRadius:12, background: on ? 'var(--good-soft)' : 'var(--surface-2)', border:'1px solid var(--line)', color: on ? 'var(--good)' : 'var(--ink-3)', flex:'none' }}><Icon name={on?'check':'lock'} size={19} /></span>
+              <div className="stack grow" style={{ gap:2, minWidth:0 }}>
+                <span className="row" style={{ gap:8, flexWrap:'wrap' }}>
+                  <span style={{ fontWeight:650, fontSize:14 }}>{p.label}</span>
+                  {c ? <span className={`badge ${on?'badge-good':'badge-neutral'}`} style={{ height:19 }}>{on?'Granted':'Withdrawn'} · {fmtAt(c.at)}</span> : <span className="badge badge-neutral" style={{ height:19 }}>Never asked</span>}
+                </span>
+                <span className="muted" style={{ fontSize:12.5, lineHeight:1.45 }}>{p.desc}</span>
+              </div>
+              {on
+                ? <button className="btn btn-soft btn-sm" style={{ flex:'none' }} onClick={()=>{ withdrawConsent(p.k); showToast(`Consent withdrawn — ${p.label}`, 'shield'); }}>Withdraw</button>
+                : <button className="btn btn-ghost btn-sm" style={{ flex:'none' }} onClick={()=>{ grantConsent(p.k); showToast(`Consent granted — ${p.label}`, 'check'); }}>Allow</button>}
+            </div>
+          );
+        })}
+      </div>
+      <div className="hr" style={{ margin:'14px 0' }} />
+      <div className="row" style={{ gap:8, flexWrap:'wrap' }}>
+        <button className="btn btn-soft btn-sm" onClick={exportData}><Icon name="download" size={14} />Export my data (JSON)</button>
+        {!confirmDel
+          ? <button className="btn btn-soft btn-sm" style={{ color:'var(--bad)' }} onClick={()=>setConfirmDel(true)}><Icon name="trash" size={14} />Delete all my data</button>
+          : <span className="row" style={{ gap:8, flexWrap:'wrap' }}>
+              <span style={{ fontSize:12.5, color:'var(--bad)', fontWeight:600 }}>This erases everything on this device and in your cloud account. Sure?</span>
+              <button className="btn btn-sm" style={{ background:'var(--bad)', color:'#fff' }} onClick={deleteEverything}>Yes, delete everything</button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setConfirmDel(false)}>Cancel</button>
+            </span>}
+      </div>
+    </Panel>
+  );
+}
+
 function Privacy() {
-  const { mode, showToast, setWiped, go, plan, planAllows } = useApp();
+  const { mode, showToast, setWiped, go, plan, planAllows, redact, setRedact } = useApp();
   const [delOpen, setDelOpen] = React.useState(false);
   const [expOpen, setExpOpen] = React.useState(false);
   const DeleteModal = window.DeleteModal;
@@ -116,10 +184,19 @@ function Privacy() {
 
         <CloudAccount />
 
+        <ConsentDataPanel />
+
         {/* controls */}
         <Panel title="Privacy" sub="Decide how Kithra handles your recordings">
           <Setting icon="lock" title="End-to-end encryption" desc="Audio and transcripts are encrypted in transit and at rest." locked />
-          <Setting icon="eye" title="Redact names & numbers" desc="Automatically mask personal identifiers in transcripts and insights." k="redact" />
+          <div className="pv-row">
+            <span className="center" style={{ width:42, height:42, borderRadius:12, background:'var(--surface-2)', border:'1px solid var(--line)', color:'var(--ink-2)', flex:'none' }}><Icon name="eye" size={20} /></span>
+            <div className="stack grow" style={{ gap:2, minWidth:0 }}>
+              <span style={{ fontWeight:650, fontSize:14.5 }}>Redact names & numbers</span>
+              <span className="muted" style={{ fontSize:13, lineHeight:1.45 }}>Really masks emails, phone numbers and long digits in transcripts before display or storage.</span>
+            </div>
+            <Toggle on={redact} onClick={()=>setRedact(!redact)} />
+          </div>
           <Setting icon="spark" title="Use my data to improve Kithra" desc="When off, your conversations are never used to train any model. Off by default." k="training" />
           {mode==='business' && <Setting icon="user" title="Share insights with my team" desc="Let teammates on your workspace see aggregated patterns (never raw audio)." k="team" />}
         </Panel>

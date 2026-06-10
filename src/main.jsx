@@ -35,6 +35,7 @@ import './screens-pricing.jsx';
 import './screens-analyze.jsx';
 import './screens-privacy.jsx';
 import './screens-system.jsx';
+import './screens-legal.jsx';
 
 // App shell, provider, router — mounts into #root on import.
 import './app.jsx';

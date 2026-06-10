@@ -12,6 +12,7 @@ const ROUTES = {
   onboarding:   { app:false },
   import:       { app:false },
   processing:   { app:false },
+  legal:        { app:false },
   dashboard:    { app:true,  label:'Dashboard',   icon:'grid',     group:'main' },
   conversation: { app:true,  label:'Conversation', icon:'wave',    group:'hidden' },
   ask:          { app:true,  label:'Ask Kithra',    icon:'chat',    group:'main' },

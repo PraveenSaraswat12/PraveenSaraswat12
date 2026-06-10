@@ -23,7 +23,7 @@ const FONT_MAP = {
 };
 
 // route aliases so friendly URLs resolve instead of falling back (e.g. #plans → pricing)
-const ROUTE_ALIASES = { plans: 'pricing', billing: 'pricing', recordings: 'library', settings: 'privacy' };
+const ROUTE_ALIASES = { plans: 'pricing', billing: 'pricing', recordings: 'library', settings: 'privacy', terms: 'legal', help: 'legal', policy: 'legal' };
 function resolveRoute(r) { return ROUTE_ALIASES[r] || r; }
 
 function AppProvider() {
@@ -109,6 +109,21 @@ function AppProvider() {
   const updateBook = React.useCallback((id, patch) => setBooks(bs => bs.map(b => b.id === id ? { ...b, ...patch } : b)), []);
   const removeBook = React.useCallback((id) => setBooks(bs => bs.filter(b => b.id !== id)), []);
 
+  // ----- consent ledger (DPDP-style: explicit, purpose-limited, withdrawable, documented) -----
+  const CONSENT_VERSION = '2026-06';
+  const [consents, setConsents] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('kithra_consents')) || {}; } catch(e){ return {}; }
+  });
+  const persistConsents = (next) => { try { localStorage.setItem('kithra_consents', JSON.stringify(next)); } catch(e){}
+    try { window.KithraCloud && window.KithraCloud.syncConsents && window.KithraCloud.syncConsents(next); } catch(e){} };
+  const grantConsent = React.useCallback((purpose) => setConsents(c => { const n = { ...c, [purpose]: { granted:true, at:Date.now(), version:CONSENT_VERSION } }; persistConsents(n); return n; }), []);
+  const withdrawConsent = React.useCallback((purpose) => setConsents(c => { const n = { ...c, [purpose]: { granted:false, at:Date.now(), version:CONSENT_VERSION } }; persistConsents(n); return n; }), []);
+  const hasConsent = React.useCallback((purpose) => !!(consents[purpose] && consents[purpose].granted), [consents]);
+
+  // ----- PII redaction preference (applies to transcripts before display/storage) -----
+  const [redact, setRedactState] = React.useState(() => { try { return localStorage.getItem('kithra_redact') !== '0'; } catch(e){ return true; } });
+  const setRedact = React.useCallback((v) => { setRedactState(v); try { localStorage.setItem('kithra_redact', v ? '1' : '0'); } catch(e){} }, []);
+
   // ----- voice prefs (shared by Ask + background capture) -----
   const [voicePrefs, setVoicePrefs] = React.useState({ lang:'auto', voice:'', voiceReply:true });
   const setVoice = React.useCallback((patch) => setVoicePrefs(p => ({ ...p, ...patch })), []);
@@ -133,6 +148,8 @@ function AppProvider() {
     clips, addClip, removeClip, viewClip, setViewClip,
     convoFrom, viewConvo, setViewConvo,
     books, addBook, updateBook, removeBook,
+    consents, grantConsent, withdrawConsent, hasConsent,
+    redact, setRedact,
   };
 
   // ----- apply tokens to root -----
@@ -166,6 +183,7 @@ function FullScreen({ route }) {
     onboarding: window.Onboarding,
     import: window.ImportSources,
     processing: window.Processing,
+    legal: window.Legal,
   };
   const Screen = map[route] || window.Landing;
   return Screen ? <Screen /> : <Placeholder name={route} />;

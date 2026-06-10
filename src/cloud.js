@@ -31,6 +31,44 @@ async function getClient() {
   return _clientPromise;
 }
 
+// ---- device-bound encryption (AES-GCM 256 via WebCrypto) ----
+// Content synced to the cloud is encrypted on-device first; the key never
+// leaves this device. (Honest scope: protects data at rest server-side; it is
+// not multi-device E2EE — that needs key escrow/passphrases, a later step.)
+let _key = null;
+async function deviceKey() {
+  if (_key) return _key;
+  const b64ToBuf = (b) => Uint8Array.from(atob(b), (c) => c.charCodeAt(0));
+  const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+  let raw = null;
+  try { const s = localStorage.getItem('kithra_dk'); if (s) raw = b64ToBuf(s); } catch (e) {}
+  if (!raw) {
+    raw = crypto.getRandomValues(new Uint8Array(32));
+    try { localStorage.setItem('kithra_dk', bufToB64(raw)); } catch (e) {}
+  }
+  _key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  return _key;
+}
+async function encStr(plain) {
+  if (plain == null || plain === '') return plain;
+  try {
+    const key = await deviceKey();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(String(plain)));
+    const buf = new Uint8Array(iv.length + ct.byteLength); buf.set(iv); buf.set(new Uint8Array(ct), iv.length);
+    return 'enc1:' + btoa(String.fromCharCode(...buf));
+  } catch (e) { return plain; }
+}
+async function decStr(s) {
+  if (typeof s !== 'string' || s.indexOf('enc1:') !== 0) return s;
+  try {
+    const buf = Uint8Array.from(atob(s.slice(5)), (c) => c.charCodeAt(0));
+    const key = await deviceKey();
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12));
+    return new TextDecoder().decode(pt);
+  } catch (e) { return '[encrypted on another device]'; }
+}
+
 const Cloud = {
   configured: () => !!getConfig(),
   config: () => getConfig(),
@@ -46,15 +84,54 @@ const Cloud = {
   async signOut() { const c = await getClient(); if (c) await c.auth.signOut(); },
 
   // book sync (called from the app whenever the library changes, if signed in)
+  // notes are encrypted on-device before upload
   async syncBooks(books) {
     try {
       const c = await getClient(); if (!c) return;
       const u = await Cloud.getUser(); if (!u) return;
-      const rows = (books || []).map(b => ({ id: b.id, user_id: u.id, title: b.title, author: b.author || null, type: b.type || 'book', notes: b.notes || null }));
+      const rows = await Promise.all((books || []).map(async (b) => ({ id: b.id, user_id: u.id, title: b.title, author: b.author || null, type: b.type || 'book', notes: b.notes ? await encStr(b.notes) : null })));
       if (rows.length) await c.from('books').upsert(rows);
     } catch (e) {}
   },
-  async fetchBooks() { try { const c = await getClient(); if (!c) return null; const u = await Cloud.getUser(); if (!u) return null; const { data } = await c.from('books').select('*').order('created_at', { ascending: false }); return data || []; } catch (e) { return null; } },
+  async fetchBooks() {
+    try {
+      const c = await getClient(); if (!c) return null; const u = await Cloud.getUser(); if (!u) return null;
+      const { data } = await c.from('books').select('*').order('created_at', { ascending: false });
+      return await Promise.all((data || []).map(async (b) => ({ ...b, notes: await decStr(b.notes) })));
+    } catch (e) { return null; }
+  },
+
+  // consent ledger sync (audit trail; DPDP-style documentation)
+  async syncConsents(consents) {
+    try {
+      const c = await getClient(); if (!c) return;
+      const u = await Cloud.getUser(); if (!u) return;
+      const rows = Object.entries(consents || {}).map(([purpose, v]) => ({ user_id: u.id, purpose, granted: !!v.granted, version: v.version || '1', at: new Date(v.at || Date.now()).toISOString() }));
+      if (rows.length) await c.from('consents').upsert(rows, { onConflict: 'user_id,purpose' });
+    } catch (e) {}
+  },
+
+  // save a recording's metadata + (encrypted) transcript to the user's account
+  async saveRecording(rec) {
+    try {
+      const c = await getClient(); if (!c) return false;
+      const u = await Cloud.getUser(); if (!u) return false;
+      await c.from('recordings').upsert({ id: rec.id, user_id: u.id, name: rec.name || null, duration: rec.durSec || null, source: rec.source || null, analysis: rec.analysis || null, transcript: rec.transcript ? await encStr(rec.transcript) : null });
+      return true;
+    } catch (e) { return false; }
+  },
+
+  // hard-delete everything this user has in the cloud (right to erasure)
+  async deleteAllCloud() {
+    try {
+      const c = await getClient(); if (!c) return false;
+      const u = await Cloud.getUser(); if (!u) return false;
+      await c.from('recordings').delete().eq('user_id', u.id);
+      await c.from('books').delete().eq('user_id', u.id);
+      await c.from('consents').delete().eq('user_id', u.id);
+      return true;
+    } catch (e) { return false; }
+  },
 
   // AI via the Edge Function (keeps the Gemma/Google key server-side)
   async askAI(prompt, system) {
