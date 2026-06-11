@@ -137,7 +137,7 @@ function Dashboard() {
           </div>
 
           <div className="grid g-2" style={{ gap:'var(--gap)', marginBottom:'var(--gap)' }}>
-            <Panel title="Kithra’s read" sub={`A real ${'{'}AI{'}'} brief across your ${ (clips||[]).length } recording${(clips||[]).length>1?'s':''}`.replace('{AI}','AI')}
+            <Panel title="Kithra’s read" sub={`A real AI brief across your ${(clips||[]).length} recording${(clips||[]).length>1?'s':''}`}
               action={<Badge kind="accent" dot={briefState==='run'}>Gemini</Badge>}>
               {briefState==='idle' && (
                 <div className="stack" style={{ gap:12 }}>
