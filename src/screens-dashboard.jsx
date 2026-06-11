@@ -1,36 +1,8 @@
 import React from 'react';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 /* ============================================================
-   LUMEN — Insights Dashboard (business + personal)
+   KITHRA — Dashboard: real metrics from YOUR recordings + a Gemini brief
    ============================================================ */
-const DASH_RANGE = {
-  '7d':  { n:4,  f:0.9,  dl:0.5, lab:'vs last week' },
-  '30d': { n:12, f:1,    dl:1,   lab:'vs last month' },
-  'qtr': { n:12, f:1.12, dl:1.5, lab:'vs last quarter' },
-};
-function applyRange(data, range) {
-  const R = DASH_RANGE[range] || DASH_RANGE['30d'];
-  const num = (s) => { const m = String(s).match(/-?\d+\.?\d*/); return m ? parseFloat(m[0]) : null; };
-  const fmtLike = (s, v) => {
-    const hasPlus = String(s).trim().startsWith('+');
-    const dec = (String(s).split('.')[1] || '').length;
-    const body = dec ? Math.abs(v).toFixed(dec) : String(Math.round(Math.abs(v)));
-    return (v < 0 ? '-' : hasPlus ? '+' : '') + body;
-  };
-  const metrics = data.metrics.map(m => {
-    const v0 = num(m.value);
-    return {
-      ...m,
-      value: v0 == null ? m.value : fmtLike(m.value, v0 * R.f),
-      spark: m.spark.slice(Math.max(0, m.spark.length - R.n)).map(x => +(x * R.f).toFixed(3)),
-      delta: +(m.delta * R.dl).toFixed(Math.abs(m.delta) % 1 ? 2 : 0),
-      deltaLabel: R.lab,
-    };
-  });
-  const sentimentTrend = data.sentimentTrend.slice(data.sentimentTrend.length - R.n).map((p, i) => ({ x:i, y:+(p.y * R.f).toFixed(3) }));
-  const recent = range === '7d' ? data.recent.slice(0, 3) : data.recent;
-  return { ...data, metrics, sentimentTrend, recent, _range:range };
-}
 
 function MetricCard({ m, accent }) {
   return (
@@ -69,251 +41,145 @@ function Panel({ title, sub, action, children, style, pad = true }) {
 }
 
 function GreetHeader() {
-  const { data, mode, t, go, flow } = useApp();
+  const { go, user } = useApp();
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-  const ranges = [['7d','7 days'],['30d','30 days'],['qtr','Quarter']];
+  const name = user && user.email ? user.email.split('@')[0] : 'there';
   return (
-    <div className="row" style={{ justifyContent:'space-between', alignItems:'flex-end', gap:16, marginBottom:22, flexWrap:'wrap' }}>
+    <div className="row" style={{ justifyContent:'space-between', alignItems:'flex-end', marginBottom:'var(--gap)', flexWrap:'wrap', gap:14 }}>
       <div className="stack" style={{ gap:6 }}>
-        <span className="eyebrow">{data.org}</span>
-        <h1 className="display" style={{ fontSize:30, margin:0, whiteSpace:'nowrap' }}>
-          {greet}, Dana
-        </h1>
-        {flow.goals?.length > 0 && (
-          <div className="row wrap" style={{ gap:7, marginTop:4 }}>
-            <span className="faint" style={{ fontSize:12.5 }}>Focused on:</span>
-            {flow.goals.slice(0,3).map((g,i)=><span key={i} className="tag">{g}</span>)}
-          </div>
-        )}
+        <span className="eyebrow">Where talk becomes insight</span>
+        <h1 className="display" style={{ fontSize:'clamp(22px,3vw,30px)', margin:0 }}>{greet}, {name}</h1>
       </div>
-      <div className="row" style={{ gap:10 }}>
-        <div className="seg" role="tablist" aria-label="Date range">
-          {ranges.map(([v,label])=>(
-            <button key={v} className={flow.dashRange===v?'on':''} onClick={()=>flow.setDashRange(v)} role="tab" aria-selected={flow.dashRange===v} title={label}>
-              {v==='qtr'?'Qtr':v}
-            </button>
-          ))}
-        </div>
-        <button className="btn btn-primary" onClick={()=>go('analyze')}><Icon name="plus" size={17} />Add recording</button>
-      </div>
+      <button className="btn btn-primary" onClick={()=>go('analyze')}><Icon name="plus" size={16} />Add recording</button>
     </div>
   );
-}
-
-/* ============ BUSINESS ============ */
-function DashBusiness({ data }) {
-  const { go } = useApp();
-  return (
-    <>
-      <div className="grid g-4" key={data._range} style={{ marginBottom:'var(--gap)' }}>
-        {data.metrics.map((m,i)=><div key={m.id} style={{ animationDelay:`${i*0.05}s` }}><MetricCard m={m} accent="var(--accent)" /></div>)}
-      </div>
-
-      <div className="dash-grid">
-        {/* left column */}
-        <div className="stack" style={{ gap:'var(--gap)', minWidth:0 }}>
-          <Panel title="Patterns that win deals" sub="Ranked by lift across analyzed calls"
-            action={<button className="btn btn-soft btn-sm" onClick={()=>go('patterns')}>See all<Icon name="chevR" size={15} /></button>}>
-            <div className="stack" style={{ gap:10 }}>
-              {data.winPatterns.map((p,i)=>(
-                <div key={i} className="winrow card-hover" style={{ display:'flex', gap:14, alignItems:'center', padding:'13px 14px', borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)' }}>
-                  <span className="center" style={{ width:38, height:38, borderRadius:11, background:'var(--good-soft)', color:'var(--good)', flex:'none' }}><Icon name="trend" size={19} /></span>
-                  <div className="stack grow" style={{ gap:3, minWidth:0 }}>
-                    <span style={{ fontWeight:650, fontSize:14.5 }}>{p.t}</span>
-                    <span className="muted" style={{ fontSize:12.5, lineHeight:1.4 }}>{p.detail}</span>
-                  </div>
-                  <div className="stack" style={{ alignItems:'flex-end', gap:3, flex:'none' }}>
-                    <span className="badge badge-good">{p.lift}</span>
-                    <span className="faint" style={{ fontSize:11 }}>{p.n} calls</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Recommended next actions" sub="One move per prospect, prioritized"
-            action={<Badge kind="accent" dot>{data.nextActions.length} active</Badge>}>
-            <div className="stack" style={{ gap:0 }}>
-              {data.nextActions.map((a,i)=>(
-                <div key={i} className="lrow click" onClick={()=>go('conversation')}>
-                  <Avatar label={a.avatar} color={a.color} size={38} />
-                  <div className="stack grow" style={{ gap:3, minWidth:0 }}>
-                    <div className="row" style={{ gap:8 }}>
-                      <span className="ttl">{a.who}</span>
-                      <span className="tag" style={{ height:21, fontSize:11 }}>{a.stage}</span>
-                    </div>
-                    <span className="muted" style={{ fontSize:12.5, lineHeight:1.4 }}>{a.action}</span>
-                  </div>
-                  <div className="stack" style={{ alignItems:'flex-end', gap:4, flex:'none' }}>
-                    <span className="metric-num" style={{ fontSize:15 }}>{a.val}</span>
-                    <RiskTag risk={a.risk} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        </div>
-
-        {/* right column */}
-        <div className="stack" style={{ gap:'var(--gap)', minWidth:0 }}>
-          <Panel title="Sentiment trajectory" sub="Across all calls, last 12 weeks">
-            <div style={{ marginTop:4 }} key={data._range}>
-              <LineChart series={[{ color:'var(--accent)', data:data.sentimentTrend }]} height={150} yMin={0} yMax={0.55} labels={['','','','','','Now']} />
-            </div>
-            <div className="row" style={{ justifyContent:'space-between', marginTop:10 }}>
-              <span className="faint" style={{ fontSize:12 }}>12 weeks ago</span>
-              <Badge kind="good" dot>Trending positive</Badge>
-            </div>
-          </Panel>
-
-          <Panel title="Top objections" sub="What's blocking deals">
-            <HBars items={data.objections.slice(0,4)} showTrend accent="var(--viz-3)" />
-            <button className="btn btn-soft btn-sm" style={{ marginTop:14, width:'100%' }} onClick={()=>go('ask')}>
-              <Icon name="chat" size={15} />Ask how to handle these
-            </button>
-          </Panel>
-
-          <Panel title="Recent calls" pad={false} style={{ overflow:'hidden' }}>
-            <div style={{ padding:'0 var(--pad-card)' }}><div className="sec-title" style={{ paddingTop:'var(--pad-card)' }}><div className="stack" style={{ gap:2 }}><h3>Recent calls</h3></div><button className="btn btn-soft btn-sm" onClick={()=>go('sources')}>All</button></div></div>
-            <div style={{ padding:'0 var(--pad-card) 6px' }}>
-              {data.recent.slice(0,4).map((c,i)=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id, from:'dashboard', rec:c})} />)}
-            </div>
-          </Panel>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function RiskTag({ risk }) {
-  const map = { hot:{k:'bad',l:'Act now'}, warm:{k:'warn',l:'This week'}, cool:{k:'neutral',l:'Nurture'} };
-  const m = map[risk] || map.cool;
-  return <span className={`badge badge-${m.k}`}>{m.l}</span>;
 }
 
 function RecentRow({ c, onClick }) {
+  const a = c.analysis || {};
+  const fmtDur = (s)=>`${Math.floor((s||0)/60)}:${String(Math.floor((s||0)%60)).padStart(2,'0')}`;
   return (
-    <div className="lrow click" onClick={onClick}>
-      <div style={{ width:54, height:30, flex:'none' }}><Waveform bars={16} seed={c.id.charCodeAt(1)||3} height={28} gap={2} color="var(--line-2)" /></div>
-      <div className="stack grow" style={{ gap:2, minWidth:0 }}>
-        <span className="ttl" style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.title}</span>
-        <span className="meta">{c.dur} · {c.when}</span>
-      </div>
-      {c.status==='analyzed' ? <SentDot s={c.sent} /> : <StatusPill status={c.status} />}
-    </div>
+    <button className="recent-row click" onClick={onClick} style={{ width:'100%', textAlign:'left', border:0, background:'transparent', display:'flex', gap:12, alignItems:'center', padding:'12px 4px', borderBottom:'1px solid var(--line)' }}>
+      <span className="center" style={{ width:36, height:36, borderRadius:11, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name="wave" size={17} /></span>
+      <span className="stack grow" style={{ gap:2, minWidth:0 }}>
+        <span style={{ fontWeight:650, fontSize:13.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name||'Recording'}</span>
+        <span className="faint" style={{ fontSize:12 }}>{fmtDur(c.durSec)}{a.wpm!=null?` · ${a.wpm} wpm`:''}{c.transcript?' · transcribed':''}</span>
+      </span>
+      <Icon name="chevR" size={16} style={{ color:'var(--ink-3)', flex:'none' }} />
+    </button>
   );
 }
 
-/* ============ PERSONAL ============ */
-function DashPersonal({ data }) {
-  const { go } = useApp();
-  return (
-    <>
-      <div className="grid g-4" key={data._range} style={{ marginBottom:'var(--gap)' }}>
-        {data.metrics.map((m,i)=><div key={m.id} style={{ animationDelay:`${i*0.05}s` }}><MetricCard m={m} accent="var(--accent)" /></div>)}
-      </div>
-
-      <div className="dash-grid">
-        <div className="stack" style={{ gap:'var(--gap)', minWidth:0 }}>
-          <Panel title="Behavior patterns" sub="Gentle observations, never judgments"
-            action={<button className="btn btn-soft btn-sm" onClick={()=>go('patterns')}>See all<Icon name="chevR" size={15} /></button>}>
-            <div className="stack" style={{ gap:10 }}>
-              {data.behaviors.map((b,i)=>{
-                const tone = { good:['var(--good-soft)','var(--good)','heart'], warn:['var(--warn-soft)','var(--warn)','flame'], neutral:['var(--surface-sunken)','var(--ink-2)','quote'] }[b.tone];
-                return (
-                  <div key={i} className="card-hover" style={{ display:'flex', gap:14, alignItems:'flex-start', padding:'14px', borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)' }}>
-                    <span className="center" style={{ width:38, height:38, borderRadius:11, background:tone[0], color:tone[1], flex:'none' }}><Icon name={tone[2]} size={19} /></span>
-                    <div className="stack grow" style={{ gap:4, minWidth:0 }}>
-                      <span style={{ fontWeight:650, fontSize:14.5 }}>{b.t}</span>
-                      <span className="muted" style={{ fontSize:12.5, lineHeight:1.45 }}>{b.detail}</span>
-                      {b.source && <span className="row" style={{ gap:6, color:'var(--ink-3)', fontSize:11.5, fontWeight:500 }}><Icon name="leaf" size={12} />{b.source}</span>}
-                    </div>
-                    <span className="tag" style={{ flex:'none' }}>{b.n}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </Panel>
-
-          <Panel title="Recurring themes" sub="What you talk about, and how it feels">
-            <div className="grid g-2" style={{ gap:12 }}>
-              {data.themes.map((th,i)=>{
-                const mood = { pos:['var(--good)','Warm'], neg:['var(--viz-4)','Tense'], neu:['var(--ink-3)','Calm'] }[th.mood];
-                return (
-                  <div key={i} style={{ padding:14, borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)' }}>
-                    <div className="row" style={{ justifyContent:'space-between' }}>
-                      <span style={{ fontWeight:650, fontSize:14 }}>{th.t}</span>
-                      <span className="metric-num" style={{ fontSize:16 }}>{th.share}%</span>
-                    </div>
-                    <div className="bar" style={{ height:7, margin:'10px 0' }}><i style={{ width:`${th.share}%`, background:mood[0] }} /></div>
-                    <span className="faint" style={{ fontSize:12, lineHeight:1.4 }}>{th.sample}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </Panel>
-        </div>
-
-        <div className="stack" style={{ gap:'var(--gap)', minWidth:0 }}>
-          <Panel title="Small steps to try" sub="Tiny, kind experiments"
-            action={<span className="center" style={{ width:32, height:32, borderRadius:9, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="target" size={17} /></span>}>
-            <div className="stack" style={{ gap:10 }}>
-              {data.steps.map((s,i)=>(
-                <label key={i} className="row click" style={{ gap:11, alignItems:'flex-start', padding:'11px 12px', borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)' }}>
-                  <span className="center" style={{ width:22, height:22, borderRadius:7, flex:'none', marginTop:1, background:s.done?'var(--accent)':'transparent', border:s.done?'0':'1.5px solid var(--line-2)', color:'#fff' }}>{s.done && <Icon name="check" size={13} stroke={3} />}</span>
-                  <div className="stack" style={{ gap:5 }}>
-                    <span style={{ fontWeight:600, fontSize:13.5, textDecoration:s.done?'line-through':'none', opacity:s.done?0.6:1 }}>{s.t}</span>
-                    <span className="faint" style={{ fontSize:12, lineHeight:1.4 }}>{s.detail}</span>
-                    {s.source && <span className="row" style={{ gap:6, marginTop:1 }}><span className="tag" style={{ height:22, fontSize:11 }}><Icon name="book" size={12} />{s.source.title}</span></span>}
-                  </div>
-                </label>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Emotional tone" sub="Last 12 weeks">
-            <LineChart series={[{ color:'var(--accent)', data:data.sentimentTrend }]} height={130} yMin={0} yMax={0.45} labels={['','','','','','Now']} />
-            <div style={{ marginTop:16 }}>
-              <div className="row" style={{ justifyContent:'space-between', marginBottom:8 }}><span className="faint" style={{ fontSize:12 }}>Daily mood</span><Legend items={[{name:'Calm',color:'var(--good)'},{name:'Mixed',color:'var(--viz-3)'},{name:'Tense',color:'var(--viz-4)'}]} /></div>
-              <MoodStrip weeks={12} seed={4} />
-            </div>
-          </Panel>
-
-          <Panel title="Recent reflections" pad={false}>
-            <div style={{ padding:'var(--pad-card) var(--pad-card) 6px' }}>
-              <div className="sec-title"><div className="stack" style={{ gap:2 }}><h3>Recent reflections</h3></div></div>
-              {data.recent.slice(0,4).map((c)=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id, from:'dashboard', rec:c})} />)}
-            </div>
-          </Panel>
-        </div>
-      </div>
-    </>
-  );
-}
-
+/* ---------- REAL dashboard: everything computed from your recordings ---------- */
 function Dashboard() {
-  const { mode, data, flow, wiped, go } = useApp();
-  if (wiped) {
-    return (
-      <div className="page">
-        <GreetHeader />
-        <div className="card card-pad center" style={{ minHeight:'46vh' }}>
-          <div className="stack center" style={{ gap:14, maxWidth:380, textAlign:'center' }}>
-            <span className="center" style={{ width:56, height:56, borderRadius:17, background:'var(--surface-sunken)', color:'var(--ink-3)' }}><Icon name="grid" size={26} /></span>
-            <span style={{ fontWeight:700, fontSize:17 }}>No insights yet</span>
-            <span className="muted" style={{ fontSize:13.5, lineHeight:1.55 }}>Your recordings were deleted, so there’s nothing to analyze. Add a new recording and Kithra will rebuild your insights.</span>
-            <button className="btn btn-primary" onClick={()=>go('analyze')}><Icon name="plus" size={16} />Add a recording</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  const rd = applyRange(data, flow.dashRange);
+  const { go, mode, clips, books, user, hasConsent } = useApp();
+  const has = (clips||[]).length > 0;
+  const a = (c) => c.analysis || {};
+  const avg = (arr) => arr.length ? arr.reduce((x,y)=>x+y,0)/arr.length : 0;
+  const wpmList = (clips||[]).map(c=>a(c).wpm).filter(v=>v!=null);
+  const voiceList = (clips||[]).map(c=>a(c).talkRatio).filter(v=>v!=null);
+  const pausesTotal = (clips||[]).reduce((x,c)=>x+(a(c).pauses||0),0);
+  const totalMin = Math.round((clips||[]).reduce((x,c)=>x+(c.durSec||0),0)/60);
+  const transcribed = (clips||[]).filter(c=>c.transcript).length;
+  const ordered = [...(clips||[])].sort((x,y)=>(x.ts||0)-(y.ts||0));
+  const series = (f)=> ordered.map(c=>f(a(c))).filter(v=>v!=null);
+  const wpmSeries = series(x=>x.wpm);
+  const voiceSeries = series(x=>x.talkRatio!=null?Math.round(x.talkRatio*100):null);
+
+  // AI brief — a real Gemini read across your library (consented)
+  const [brief, setBrief] = React.useState('');
+  const [briefState, setBriefState] = React.useState('idle');
+  const runBrief = async () => {
+    setBriefState('run');
+    try {
+      const out = await window.KithraAI.askKithra({
+        question: mode==='business'
+          ? 'Give me a sharp 3-sentence brief on my recent conversations: how I am performing, the clearest pattern, and the one thing to do next.'
+          : 'Give me a gentle 3-sentence reflection on my recent recordings: how I sound, one pattern you notice, and one small thing to try.',
+        mode, clips, books });
+      setBrief(out); setBriefState('done');
+    } catch(e){ setBrief('Couldn’t reach the AI just now — try again in a moment.'); setBriefState('done'); }
+  };
+
   return (
     <div className="page">
       <GreetHeader />
-      {mode === 'business' ? <DashBusiness data={rd} /> : <DashPersonal data={rd} />}
+
+      {!has ? (
+        <div className="card center anim-up" style={{ padding:'70px 24px' }}>
+          <div className="stack center" style={{ gap:16, maxWidth:460, textAlign:'center' }}>
+            <span className="center" style={{ width:64, height:64, borderRadius:20, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="mic" size={30} /></span>
+            <h2 className="display" style={{ fontSize:26, margin:0 }}>Your dashboard is waiting for its first conversation</h2>
+            <p className="muted" style={{ margin:0, fontSize:14.5, lineHeight:1.6 }}>Record a voice note or upload a call. Kithra measures it on your device — pace, pauses, energy — then this page fills with your real numbers. No sample data here.</p>
+            <div className="row center" style={{ gap:10, flexWrap:'wrap' }}>
+              <button className="btn btn-primary btn-lg" onClick={()=>go('analyze')}><Icon name="mic" size={18} />Record or upload</button>
+              <button className="btn btn-soft btn-lg" onClick={()=>go('books')}><Icon name="book" size={17} />Browse the books</button>
+            </div>
+            <PrivacyChip text="Analyzed on-device · nothing leaves without your consent" />
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="grid g-4" style={{ marginBottom:'var(--gap)' }}>
+            {[
+              { label:'Recordings', value:String((clips||[]).length), unit:'', spark:ordered.map((_,i)=>i+1) },
+              { label:'Minutes captured', value:String(totalMin), unit:'min', spark:ordered.map(c=>Math.round((c.durSec||0)/60)) },
+              { label:'Avg. pace', value: wpmList.length?String(Math.round(avg(wpmList))):'—', unit:'wpm', spark:wpmSeries },
+              { label:'Avg. active voice', value: voiceList.length?String(Math.round(avg(voiceList)*100)):'—', unit:'%', spark:voiceSeries },
+            ].map((m,i)=>(
+              <div key={i} className="card card-pad metric anim-up" style={{ animationDelay:`${i*0.05}s` }}>
+                <span className="label">{m.label}</span>
+                <div className="val"><span className="metric-num n">{m.value}</span>{m.unit && <span className="u">{m.unit}</span>}</div>
+                {m.spark && m.spark.length>1 && <div style={{ marginTop:12 }}><Sparkline data={m.spark} color="var(--accent)" width={120} height={30} /></div>}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid g-2" style={{ gap:'var(--gap)', marginBottom:'var(--gap)' }}>
+            <Panel title="Kithra’s read" sub={`A real ${'{'}AI{'}'} brief across your ${ (clips||[]).length } recording${(clips||[]).length>1?'s':''}`.replace('{AI}','AI')}
+              action={<Badge kind="accent" dot={briefState==='run'}>Gemini</Badge>}>
+              {briefState==='idle' && (
+                <div className="stack" style={{ gap:12 }}>
+                  <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.6 }}>Ask Kithra to read across everything you’ve recorded{transcribed<(clips||[]).length?` (${(clips||[]).length-transcribed} not transcribed yet — transcripts make this sharper)`:''} and give you the headline.</p>
+                  {window.KithraAI && window.KithraAI.aiReady()
+                    ? (hasConsent('cloud_ai')
+                        ? <button className="btn btn-primary btn-sm" style={{ alignSelf:'flex-start' }} onClick={runBrief}><Icon name="spark" size={14} fill />Generate my brief</button>
+                        : <button className="btn btn-primary btn-sm" style={{ alignSelf:'flex-start' }} onClick={()=>go('privacy')}><Icon name="shield" size={14} />Allow cloud AI first (Privacy → Consent)</button>)
+                    : <span className="faint" style={{ fontSize:12.5 }}>Connect the cloud in Privacy & Data to enable this.</span>}
+                </div>
+              )}
+              {briefState==='run' && <div className="row" style={{ gap:12 }}><LiveWave bars={20} height={30} /><span className="faint" style={{ fontSize:13 }}>Reading your recordings…</span></div>}
+              {briefState==='done' && (
+                <div className="stack" style={{ gap:12 }}>
+                  <p style={{ margin:0, fontSize:14.5, lineHeight:1.65 }}>{brief}</p>
+                  <button className="btn btn-soft btn-sm" style={{ alignSelf:'flex-start' }} onClick={runBrief}><Icon name="refresh" size={14} />Refresh</button>
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="Recent recordings" pad={false} style={{ overflow:'hidden' }}
+              action={<button className="btn btn-soft btn-sm" onClick={()=>go('library')}>All<Icon name="chevR" size={14} /></button>}>
+              <div style={{ padding:'4px var(--pad-card) 8px' }}>
+                {[...(clips||[])].slice(0,5).map(c=><RecentRow key={c.id} c={c} onClick={()=>go('conversation',{convo:c.id, from:'dashboard', rec:c})} />)}
+              </div>
+            </Panel>
+          </div>
+
+          <div className="grid g-2" style={{ gap:'var(--gap)' }}>
+            <Panel title="Pace over time" sub="Words per minute, every recording (measured on-device)">
+              {wpmSeries.length>1
+                ? <LineChart series={[{ color:'var(--accent)', data:wpmSeries.map((y,x)=>({x,y})) }]} height={170} yMin={0} labels={wpmSeries.map(()=> '')} />
+                : <p className="faint" style={{ fontSize:13 }}>Add one more recording to see your trend.</p>}
+            </Panel>
+            <Panel title="Talk vs. listen" sub="Active-voice share per recording">
+              {voiceSeries.length>1
+                ? <LineChart series={[{ color:'var(--viz-2)', data:voiceSeries.map((y,x)=>({x,y})) }]} height={170} yMin={0} yMax={100} labels={voiceSeries.map(()=> '')} />
+                : <p className="faint" style={{ fontSize:13 }}>Add one more recording to see your balance.</p>}
+            </Panel>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -148,6 +148,7 @@ function Analyze() {
   const chunksRef = React.useRef([]);
   const recTimerRef = React.useRef(null);
 
+  const [clipId, setClipId] = React.useState(null);
   const handleFile = async (file) => {
     if (!file) return;
     setStage('analyzing'); setProgress(0); setErr(''); setAiSummary('');
@@ -159,7 +160,9 @@ function Analyze() {
         const url = URL.createObjectURL(file);
         setClipUrl(url);
         const source = /^Live recording/.test(file.name) ? 'listen' : 'upload';
-        addClip({ id: 'clip-' + Date.now(), name: r.name, url, durSec: r.duration, peaks: r.peaks, source, analysis: r, ts: Date.now() });
+        const id = 'clip-' + Date.now();
+        setClipId(id);
+        addClip({ id, name: r.name, url, durSec: r.duration, peaks: r.peaks, source, analysis: r, ts: Date.now() });
       } catch (e) {}
       // optional: natural-language summary via Claude if available
       if (window.claude && typeof window.claude.complete === 'function') {
@@ -217,7 +220,7 @@ function Analyze() {
   // open a saved recording's insights (navigated from Recordings)
   React.useEffect(() => {
     if (!viewClip) return;
-    setRes(viewClip.analysis); setClipUrl(viewClip.url); setAiSummary(''); setStage('done');
+    setRes(viewClip.analysis); setClipUrl(viewClip.url); setClipId(viewClip.id || null); setAiSummary(''); setStage('done');
     setViewClip(null);
   }, [viewClip]);
 
@@ -313,7 +316,7 @@ function Analyze() {
         </div>
       )}
 
-      {stage==='done' && res && <AnalyzeResults res={res} aiSummary={aiSummary} mode={mode} clipUrl={clipUrl} planAllows={planAllows} go={go} />}
+      {stage==='done' && res && <AnalyzeResults res={res} aiSummary={aiSummary} mode={mode} clipUrl={clipUrl} clipId={clipId} planAllows={planAllows} go={go} />}
     </div>
   );
 }
@@ -397,7 +400,7 @@ function transcriptInsights(text, durSec) {
   return { wc, wpm, fillers };
 }
 
-function TranscriptPanel({ clipUrl, durSec }) {
+function TranscriptPanel({ clipUrl, clipId, durSec }) {
   const [state, setState] = React.useState('idle'); // idle | loading | running | done | error
   const [text, setText] = React.useState('');
   const [prog, setProg] = React.useState(0);
@@ -406,10 +409,14 @@ function TranscriptPanel({ clipUrl, durSec }) {
   const [ctx, setCtx] = React.useState(''); // names/terms to spell right
   const [engine, setEngine] = React.useState('');
   const [askConsent, setAskConsent] = React.useState(false);
-  const { hasConsent, grantConsent, redact } = useApp();
+  const { hasConsent, grantConsent, redact, updateClip } = useApp();
   const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
   const [useCloud, setUseCloud] = React.useState(cloudOn); // engine choice, user-visible
-  const finish = (t) => { setText(redact ? redactPII((t || '').trim()) : (t || '').trim()); setState('done'); };
+  const finish = (t) => {
+    const final = redact ? redactPII((t || '').trim()) : (t || '').trim();
+    setText(final); setState('done');
+    if (clipId && final) updateClip(clipId, { transcript: final }); // flows to Library, Insights & Ask
+  };
   const runCloud = async () => {
     setState('running'); setEngine('Cloud · Google');
     const audio = await to16kMono(clipUrl);
@@ -540,7 +547,7 @@ function TranscriptPanel({ clipUrl, durSec }) {
   );
 }
 
-function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
+function AnalyzeResults({ res, aiSummary, mode, clipUrl, clipId, planAllows, go }) {
   const { books } = useApp();
   const metrics = [
     { label:'Duration', value:fmtTime(res.duration), ic:'clock' },
@@ -596,7 +603,7 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, planAllows, go }) {
       {/* deeper speaking insights — Plus */}
       {planAllows && planAllows('plus') ? (
        <>
-        {clipUrl && <TranscriptPanel clipUrl={clipUrl} durSec={res.duration} />}
+        {clipUrl && <TranscriptPanel clipUrl={clipUrl} clipId={clipId} durSec={res.duration} />}
         <Panel title="Speaking insights" sub="A coaching read from your real acoustics">
           <div className="grid g-2">
             {speakingInsights(res).map((it,i)=>(

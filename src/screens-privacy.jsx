@@ -8,6 +8,31 @@ function Toggle({ on, onClick }) {
   return <button className={`toggle ${on?'on':''}`} onClick={onClick} role="switch" aria-checked={on}><i /></button>;
 }
 
+function HowProtected() {
+  return (
+    <Panel title="How Kithra protects your data" sub="Plain answers — this is the heart of the product">
+      <div className="grid g-2" style={{ gap:12 }}>
+        {[
+          ['mic','Analyzed on your device','Recording analysis (pace, pauses, energy, waveform) runs in your browser/app. By default, audio never leaves your device.'],
+          ['shield','Nothing moves without consent','Cloud transcription and AI insights each require an explicit, recorded consent — purpose-by-purpose, withdrawable in one click below.'],
+          ['lock','Encrypted before upload','Anything you sync (transcripts, book notes) is encrypted on your device with AES-GCM-256 before it reaches our database; rows are isolated per-user.'],
+          ['eye','Redacted before AI','With redaction on, emails, phone numbers and long digits are masked in transcripts before display, storage, or any AI call.'],
+          ['spark','Never trains models','Your content is never sold and never used to train shared models. The AI key lives server-side — it never ships in the app.'],
+          ['trash','Erasable in one click','“Delete all my data” wipes this device and your cloud rows immediately. Export everything as JSON anytime.'],
+        ].map((x,i)=>(
+          <div key={i} className="row" style={{ gap:11, alignItems:'flex-start', padding:'12px 13px', borderRadius:'var(--r-ctrl)', background:'var(--surface-2)', border:'1px solid var(--line)' }}>
+            <span className="center" style={{ width:34, height:34, borderRadius:10, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name={x[0]} size={17} /></span>
+            <div className="stack" style={{ gap:2, minWidth:0 }}>
+              <span style={{ fontWeight:650, fontSize:13.5 }}>{x[1]}</span>
+              <span className="faint" style={{ fontSize:12.5, lineHeight:1.5 }}>{x[2]}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
 function CloudAccount() {
   const { showToast, books } = useApp();
   const Cloud = window.KithraCloud;
@@ -181,6 +206,8 @@ function Privacy() {
             ))}
           </div>
         </div>
+
+        <HowProtected />
 
         <CloudAccount />
 

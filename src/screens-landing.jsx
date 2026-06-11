@@ -136,7 +136,7 @@ function HeroCentered({ enter }) {
         <Icon name="lock" size={13} /> Private by design
       </span>
       <h1 className="display h1 anim-up" style={{ animationDelay:'.05s', maxWidth:900, margin:'20px auto 0', lineHeight:1.1 }}>
-        Turn your conversations into <em style={{ fontStyle:'italic', color:'var(--accent-strong)' }}>clarity</em>
+        Where talk becomes <em style={{ fontStyle:'italic', color:'var(--accent-strong)' }}>insight</em>
       </h1>
       <p className="lp-lead anim-up" style={{ animationDelay:'.12s', maxWidth:620, marginTop:30 }}>
         Kithra transcribes and analyzes your recorded calls, meetings, and reflections — then returns the patterns, signals, and next steps that actually matter.
@@ -162,7 +162,7 @@ function HeroSplit({ enter }) {
           <Icon name="lock" size={13} /> Private by design
         </span>
         <h1 className="display h1 anim-up" style={{ animationDelay:'.05s', marginTop:18 }}>
-          The quiet intelligence inside every conversation
+          Where talk becomes insight
         </h1>
         <p className="lp-lead anim-up" style={{ animationDelay:'.12s', margin:'18px 0 0', maxWidth:520 }}>
           Bring your recordings. Kithra listens, finds the patterns, and tells you what to do next — for your business or for yourself.

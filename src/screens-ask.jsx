@@ -1,46 +1,23 @@
 import React from 'react';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { askKithra, aiReady } from './ai.js';
 /* ============================================================
-   LUMEN — Ask Kithra + voice agent (talk, real voices, accents)
-   Live Capture now lives app-level in screens-capture.jsx.
+   KITHRA — Ask: a REAL agent over YOUR recordings & books
+   Every answer is grounded in actual clips, transcripts and
+   metrics via Gemini. Voice in/out via Web Speech.
    ============================================================ */
-function renderBold(text) {
-  const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p,i)=> p.startsWith('**') && p.endsWith('**')
-    ? <strong key={i} style={{ fontWeight:700, color:'var(--ink)' }}>{p.slice(2,-2)}</strong>
-    : <React.Fragment key={i}>{p}</React.Fragment>);
-}
-const stripMd = (s) => String(s).replace(/\*\*/g,'').replace(/[*_`#>]/g,'').trim();
-
-function MiniChart({ kind, mode }) {
-  const data = window.LUMEN[mode];
-  if (kind === 'objections') return <HBars items={data.objections.slice(0,4)} showTrend accent="var(--viz-3)" />;
-  if (kind === 'patterns') return (
-    <div className="stack" style={{ gap:8 }}>
-      {data.winPatterns.slice(0,3).map((p,i)=>(
-        <div key={i} className="row" style={{ justifyContent:'space-between', gap:10 }}>
-          <span style={{ fontSize:13, fontWeight:600 }}>{p.t}</span><span className="badge badge-good">{p.lift}</span>
-        </div>
-      ))}
-    </div>
-  );
-  if (kind === 'emotion') return <LineChart series={[{ color:'var(--accent)', data:data.sentimentTrend }]} height={120} yMin={0} yMax={0.45} labels={['','','','','','Now']} />;
-  return null;
-}
-
 const ASK_LANGS = [
-  { value:'auto',  label:'Auto-detect', rec:(navigator.language||'en-US'), reply:'the user’s language' },
-  { value:'en-US', label:'English',     rec:'en-US', reply:'English' },
-  { value:'es-ES', label:'Español',     rec:'es-ES', reply:'Spanish' },
-  { value:'hi-IN', label:'हिन्दी',       rec:'hi-IN', reply:'Hindi' },
-  { value:'fr-FR', label:'Français',    rec:'fr-FR', reply:'French' },
-  { value:'de-DE', label:'Deutsch',     rec:'de-DE', reply:'German' },
-  { value:'pt-BR', label:'Português',   rec:'pt-BR', reply:'Portuguese' },
+  { value:'auto',  label:'Auto', rec:(navigator.language||'en-US'), reply:'auto' },
+  { value:'en-US', label:'English', rec:'en-US', reply:'English' },
+  { value:'hi-IN', label:'हिन्दी', rec:'hi-IN', reply:'Hindi' },
+  { value:'es-ES', label:'Español', rec:'es-ES', reply:'Spanish' },
+  { value:'fr-FR', label:'Français', rec:'fr-FR', reply:'French' },
+  { value:'de-DE', label:'Deutsch', rec:'de-DE', reply:'German' },
 ];
+const fmtDur = (s)=>`${Math.floor((s||0)/60)}:${String(Math.floor((s||0)%60)).padStart(2,'0')}`;
 
 function AskKithra() {
-  const { mode, go, voicePrefs, setVoice, openCapture } = useApp();
-  const cfg = window.LUMEN.ask[mode];
+  const { mode, go, voicePrefs, setVoice, clips, books, askFocus, setAskFocus, hasConsent, grantConsent } = useApp();
   const V = window.LumenVoice || {};
   const [msgs, setMsgs] = React.useState([]);
   const [input, setInput] = React.useState('');
@@ -49,58 +26,47 @@ function AskKithra() {
   const [interim, setInterim] = React.useState('');
   const [speaking, setSpeaking] = React.useState(false);
   const [voiceErr, setVoiceErr] = React.useState('');
-  const [voiceOpts, setVoiceOpts] = React.useState([{ value:'', label:'Auto · natural' }]);
+  const [needConsent, setNeedConsent] = React.useState(false);
   const scrollRef = React.useRef(null);
   const recRef = React.useRef(null);
-
   const curLang = ASK_LANGS.find(l => l.value === voicePrefs.lang) || ASK_LANGS[0];
+  const ready = aiReady();
+  const transcribed = (clips||[]).filter(c=>c.transcript).length;
 
-  // build the voice list from the device's REAL voices (loads async)
-  React.useEffect(() => {
-    const build = () => {
-      const vs = (V.listVoices && V.listVoices()) || [];
-      setVoiceOpts([{ value:'', label:'Auto · natural' }, ...vs.map(v => ({ value:v.uri, label:v.label }))]);
-    };
-    build();
-    const ss = window.speechSynthesis;
-    if (ss && ss.addEventListener) { ss.addEventListener('voiceschanged', build); }
-    const t = setTimeout(build, 700);
-    return () => { if (ss && ss.removeEventListener) ss.removeEventListener('voiceschanged', build); clearTimeout(t); };
-  }, []);
-
-  React.useEffect(() => { setMsgs([]); setInput(''); }, [mode]);
   React.useEffect(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, typing, interim]);
   React.useEffect(() => () => { try { recRef.current && recRef.current.stop(); } catch(e){} V.stopSpeak && V.stopSpeak(); }, []);
 
   const speakAnswer = (text) => {
     if (!voicePrefs.voiceReply || !V.ttsSupported || !text) return;
-    V.speak(stripMd(text), { voiceName:voicePrefs.voice, lang:curLang.rec, onstart:()=>setSpeaking(true), onend:()=>setSpeaking(false), onerror:()=>setSpeaking(false) });
+    V.speak(text, { voiceName:voicePrefs.voice, lang:curLang.rec, onstart:()=>setSpeaking(true), onend:()=>setSpeaking(false), onerror:()=>setSpeaking(false) });
   };
-  const pushAI = (ans) => { setMsgs(m => [...m, { role:'ai', ...ans }]); speakAnswer(ans.text); };
 
   const send = async (text) => {
     const q = (text ?? input).trim();
-    if (!q) return;
+    if (!q || typing) return;
     V.stopSpeak && V.stopSpeak(); setSpeaking(false);
+    if (!ready) { setMsgs(m=>[...m, { role:'me', text:q }, { role:'ai', text:'I’m not connected to the cloud on this build, so I can’t reason over your recordings yet. Open Privacy & Data → Cloud & account to connect — or use the on-device analysis on the Analyze page.' }]); setInput(''); return; }
+    if (!hasConsent('cloud_ai')) { setNeedConsent(true); setInput(q); return; }
     setMsgs(m => [...m, { role:'me', text:q }]);
     setInput(''); setInterim(''); setTyping(true);
-
-    const canned = cfg.answers[q];
-    if (canned) { await new Promise(r=>setTimeout(r,850)); setTyping(false); pushAI(canned); return; }
-
-    if (window.claude && typeof window.claude.complete === 'function') {
-      try {
-        const sys = `You are Kithra, a calm, private voice agent for conversation intelligence. The user is in ${mode} mode (${mode==='business'?'sales & work':'personal reflection & well-being'}). Reply in 2–4 short, warm, spoken-friendly sentences. ${mode==='personal'?'Be gentle and supportive, evidence-informed, never clinical.':'Be practical and concrete, like a sharp sales coach.'} Reply in ${curLang.reply}. Plain text only, no markdown. The user asked: "${q}"`;
-        const out = await window.claude.complete(sys);
-        const clean = stripMd(out || '') || cfg.answers.default.text;
-        setTyping(false); pushAI({ text:clean });
-      } catch (e) { setTyping(false); pushAI(cfg.answers.default); }
-    } else { await new Promise(r=>setTimeout(r,950)); setTyping(false); pushAI(cfg.answers.default); }
+    try {
+      const history = msgs.slice(-6);
+      const out = await askKithra({ question:q, mode, clips, books, focus:askFocus, history, language: curLang.reply==='auto'?null:curLang.reply });
+      setTyping(false);
+      const ans = (out||'').trim() || 'I came back empty — try asking that another way.';
+      setMsgs(m => [...m, { role:'ai', text:ans }]);
+      speakAnswer(ans);
+    } catch(e) {
+      setTyping(false);
+      setMsgs(m => [...m, { role:'ai', text:'I couldn’t reach the AI just now ('+((e&&e.message)||'network')+'). Give it a second and try again.' }]);
+    }
   };
+
+  const allowAndSend = () => { grantConsent('cloud_ai'); setNeedConsent(false); send(); };
 
   const toggleMic = () => {
     setVoiceErr('');
-    if (!V.sttSupported) { setVoiceErr('Voice input needs Chrome or Edge with microphone access. You can still type.'); return; }
+    if (!V.sttSupported) { setVoiceErr('Voice input needs Chrome/Edge with mic access — typing works everywhere.'); return; }
     if (listening) { try { recRef.current && recRef.current.stop(); } catch(e){} return; }
     V.stopSpeak && V.stopSpeak(); setSpeaking(false);
     const r = V.createRecognizer(curLang.rec, {
@@ -108,33 +74,50 @@ function AskKithra() {
       onInterim:(t)=>setInterim(t),
       onFinal:(t)=>{ setInterim(''); if(t) send(t); },
       onEnd:()=>{ setListening(false); setInterim(''); },
-      onError:(e)=>{ setListening(false); setInterim(''); if(e && e.error==='not-allowed') setVoiceErr('Microphone permission was blocked. Allow mic access to talk to Kithra.'); },
+      onError:(e)=>{ setListening(false); setInterim(''); if(e && e.error==='not-allowed') setVoiceErr('Microphone permission was blocked.'); },
     });
     if (!r) { setVoiceErr('Voice input is not available in this browser.'); return; }
     recRef.current = r; try { r.start(); } catch(e){}
   };
   const stopSpeaking = () => { V.stopSpeak && V.stopSpeak(); setSpeaking(false); };
-  const onPickVoice = (v) => { setVoice({ voice:v }); setVoiceErr(''); if (V.preview) try { V.preview(v, curLang.rec); } catch(e){} };
 
   const empty = msgs.length === 0 && !typing;
+  const sugg = askFocus
+    ? ['Summarize this recording','What did I do well here?','What should I improve?','What’s my next step?']
+    : (clips||[]).length === 0
+      ? ['What can you do?','How do I get started?']
+      : mode==='business'
+        ? ['How am I trending across my calls?','What’s my biggest weakness?','Compare my last two recordings','What should I practice next?']
+        : ['How do I sound lately?','What patterns do you notice?','Am I leaving space for others?','One small thing to try?'];
 
   return (
     <div className="ask-wrap">
-      {/* voice toolbar */}
+      {/* clean toolbar: language, voice toggle, real context status */}
       <div className="voice-bar">
-        <div className="row" style={{ gap:8, flexWrap:'wrap' }}>
-          <Dropdown icon="chat" label="Language" value={voicePrefs.lang} options={ASK_LANGS} onChange={(v)=>setVoice({lang:v})} />
-          <Dropdown icon="mic" label="Voice" value={voicePrefs.voice} options={voiceOpts} onChange={onPickVoice} />
-        </div>
+        <Dropdown icon="chat" label="Language" value={voicePrefs.lang} options={ASK_LANGS} onChange={(v)=>setVoice({lang:v})} />
         <div className="grow" />
-        <span className="vchip ghost" title="In production, Kithra’s voice agent runs on Google Gemini"><Icon name="bolt" size={14} />Gemini</span>
+        <span className="vchip ghost" title="What Kithra can see right now">
+          <Icon name="layers" size={14} />{(clips||[]).length} recording{(clips||[]).length===1?'':'s'} · {transcribed} transcribed · {(books||[]).length} books
+        </span>
+        <span className={`vchip ${ready?'on':''}`} title={ready?'Connected to Gemini through your private cloud':'Cloud not connected'}>
+          <Icon name="bolt" size={14} />{ready?'Gemini live':'Offline'}
+        </span>
         <button className={`vchip ${voicePrefs.voiceReply?'on':''}`} onClick={()=>{ if(voicePrefs.voiceReply) stopSpeaking(); setVoice({voiceReply:!voicePrefs.voiceReply}); }} title="Speak answers aloud">
           <Icon name={voicePrefs.voiceReply?'wave':'pause'} size={15} />{voicePrefs.voiceReply?'Voice on':'Voice off'}
         </button>
-        <button className="vchip" onClick={()=>openCapture()} title="Always-on listening">
-          <Icon name="mic" size={15} />Live capture
-        </button>
       </div>
+
+      {/* focused recording banner */}
+      {askFocus && (
+        <div className="row anim-in" style={{ gap:10, margin:'10px auto 0', maxWidth:760, width:'100%', padding:'10px 14px', borderRadius:'var(--r-ctrl)', background:'var(--accent-soft)', border:'1px solid color-mix(in srgb,var(--accent) 25%,transparent)' }}>
+          <span className="center" style={{ width:30, height:30, borderRadius:9, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }}><Icon name="wave" size={15} /></span>
+          <div className="stack grow" style={{ gap:1, minWidth:0 }}>
+            <span style={{ fontWeight:700, fontSize:13, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>Asking about: {askFocus.name||'Recording'}</span>
+            <span className="faint" style={{ fontSize:11.5 }}>{fmtDur(askFocus.durSec)}{askFocus.transcript?' · transcript included':' · no transcript yet (acoustics only)'}</span>
+          </div>
+          <button className="btn btn-ghost btn-sm" style={{ flex:'none' }} onClick={()=>setAskFocus(null)}>All recordings</button>
+        </div>
+      )}
 
       <div ref={scrollRef} className="ask-msgs scroll" style={{ overflowY:'auto' }}>
         {empty && (
@@ -145,14 +128,15 @@ function AskKithra() {
                 <Icon name="mic" size={30} />
               </button>
               <div className="stack" style={{ gap:8 }}>
-                <h2 className="display" style={{ fontSize:26, margin:0 }}>Talk to Kithra, or type</h2>
+                <h2 className="display" style={{ fontSize:26, margin:0 }}>{askFocus?`Ask about “${(askFocus.name||'this recording').slice(0,38)}”`:'Ask across your recordings'}</h2>
                 <p className="muted" style={{ margin:0, fontSize:14.5, lineHeight:1.55 }}>
-                  {mode==='business'
-                    ? 'Ask out loud or in writing — Kithra answers across your calls, cites the moments, and can reply in your language and accent.'
-                    : 'Speak naturally or type. Kithra reflects on your patterns, points to the moments, and can talk back in your language and voice.'}
+                  {(clips||[]).length===0
+                    ? 'You haven’t recorded anything yet — Kithra answers from your real data, so add a recording first and then ask away.'
+                    : 'Kithra reads your actual recordings — the transcripts, the pace, the pauses — and answers like a coach who was in the room.'}
                 </p>
               </div>
-              <PrivacyChip text="Voice & answers stay in your workspace" />
+              {(clips||[]).length===0 && <button className="btn btn-primary" onClick={()=>go('analyze')}><Icon name="mic" size={16} />Record something first</button>}
+              <PrivacyChip text="Questions use only what you’ve consented to share" />
             </div>
           </div>
         )}
@@ -161,7 +145,7 @@ function AskKithra() {
           <div key={i} className={`ask-row ${m.role==='me'?'me':''} anim-up`}>
             {m.role==='ai'
               ? <span className="ask-av" style={{ background:'var(--accent)', color:'var(--accent-ink)' }}><Icon name="spark" size={17} /></span>
-              : <Avatar label="DR" color="var(--viz-1)" size={34} />}
+              : <Avatar label="You" color="var(--viz-1)" size={34} />}
             <div className={`ask-bubble ${m.role==='me'?'me':'ai'}`}>
               {m.role==='ai' && i===msgs.length-1 && speaking && (
                 <div className="row" style={{ gap:8, marginBottom:8, color:'var(--accent-strong)' }}>
@@ -170,28 +154,7 @@ function AskKithra() {
                   <button className="linkbtn" style={{ fontSize:11.5 }} onClick={stopSpeaking}>stop</button>
                 </div>
               )}
-              <div>{renderBold(m.text)}</div>
-              {m.chart && <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid var(--line)' }}><MiniChart kind={m.chart} mode={mode} /></div>}
-              {m.cites && (
-                <div style={{ marginTop:12 }}>
-                  <span className="eyebrow" style={{ display:'block', marginBottom:8 }}>Cited from your recordings</span>
-                  <div className="stack" style={{ gap:7 }}>
-                    {m.cites.map((c,j)=>(
-                      <div key={j} className="ask-cite" onClick={()=>go('conversation')}>
-                        <span className="center" style={{ width:30, height:22, flex:'none' }}><Waveform bars={9} seed={j+2} height={20} gap={2} color="var(--accent)" /></span>
-                        <span className="grow" style={{ fontSize:12.5, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.c}</span>
-                        <span className="tag" style={{ height:22, fontSize:11 }}><Icon name="clock" size={12} />{c.m}</span>
-                        <Icon name="chevR" size={15} />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {m.informedBy && (
-                <div style={{ marginTop:14, paddingTop:14, borderTop:'1px solid var(--line)' }}>
-                  <EvidenceList items={m.informedBy} label="Cross-referenced with" />
-                </div>
-              )}
+              <div style={{ whiteSpace:'pre-wrap' }}>{m.text}</div>
             </div>
           </div>
         ))}
@@ -205,6 +168,16 @@ function AskKithra() {
       </div>
 
       <div className="ask-composer">
+        {needConsent && (
+          <div className="card anim-in" style={{ padding:'14px 16px', marginBottom:10, border:'1px solid color-mix(in srgb,var(--accent) 30%,transparent)', background:'var(--accent-soft)' }}>
+            <div className="row" style={{ gap:10, marginBottom:8 }}><Icon name="shield" size={17} style={{ color:'var(--accent-strong)' }} /><span style={{ fontWeight:700, fontSize:13.5 }}>Allow Kithra to send context to the AI?</span></div>
+            <p className="muted" style={{ margin:'0 0 10px', fontSize:12.5, lineHeight:1.5 }}>Your question plus recording summaries{transcribed>0?' and transcripts':''} go to Google’s AI to compose the answer — never for training, withdrawable anytime in Privacy → Consent.</p>
+            <div className="row" style={{ gap:8 }}>
+              <button className="btn btn-primary btn-sm" onClick={allowAndSend}><Icon name="check" size={14} />Allow & ask</button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setNeedConsent(false)}>Not now</button>
+            </div>
+          </div>
+        )}
         {voiceErr && <div className="voice-err"><Icon name="lock" size={13} />{voiceErr}</div>}
         {listening && (
           <div className="listening-banner">
@@ -218,27 +191,24 @@ function AskKithra() {
         )}
         {empty && !listening && (
           <div className="ask-sugg">
-            {cfg.suggestions.map((s,i)=>(
-              <button key={i} className="chip" onClick={()=>send(s)}>{s}</button>
-            ))}
+            {sugg.map((s,i)=>(<button key={i} className="chip" onClick={()=>send(s)}>{s}</button>))}
           </div>
         )}
         <div className="ask-input">
-          <button className={`mic-btn ${listening?'live':''}`} onClick={toggleMic} aria-label="Talk to Kithra" title="Hold a conversation by voice">
+          <button className={`mic-btn ${listening?'live':''}`} onClick={toggleMic} aria-label="Talk to Kithra" title="Ask by voice">
             <Icon name="mic" size={19} />
           </button>
-          <textarea rows={1} placeholder={listening?'Listening…':(mode==='business'?'Ask about objections, deals, sentiment…':'Ask about your habits, tone, moments…')}
+          <textarea rows={1} placeholder={listening?'Listening…':askFocus?`Ask about ${askFocus.name||'this recording'}…`:'Ask about your recordings…'}
             value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } }} />
           <button className="btn btn-icon btn-primary" style={{ width:42, height:42 }} onClick={()=>send()} aria-label="Send"><Icon name="send" size={18} /></button>
         </div>
-        <div className="center" style={{ marginTop:8 }}><span className="faint" style={{ fontSize:11.5 }}>Speech is processed on-device · agent powered by Gemini in production · answers cite your recordings</span></div>
+        <div className="center" style={{ marginTop:8 }}><span className="faint" style={{ fontSize:11.5 }}>Answers are grounded in your real recordings · powered by Gemini through your private cloud</span></div>
       </div>
     </div>
   );
 }
 
 Object.assign(window, { AskKithra });
-
 
 export { AskKithra };

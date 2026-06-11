@@ -120,6 +120,23 @@ const Cloud = {
       return true;
     } catch (e) { return false; }
   },
+  // fetch the user's saved recordings (decrypting transcripts) — cross-session memory
+  async fetchRecordings() {
+    try {
+      const c = await getClient(); if (!c) return null;
+      const u = await Cloud.getUser(); if (!u) return null;
+      const { data } = await c.from('recordings').select('*').order('created_at', { ascending: false }).limit(50);
+      return await Promise.all((data || []).map(async (r) => ({
+        id: r.id, name: r.name, durSec: r.duration, source: r.source || 'upload',
+        analysis: r.analysis, transcript: await decStr(r.transcript),
+        ts: r.created_at ? new Date(r.created_at).getTime() : Date.now(), cloud: true,
+      })));
+    } catch (e) { return null; }
+  },
+  async deleteRecording(id) {
+    try { const c = await getClient(); if (!c) return false; const u = await Cloud.getUser(); if (!u) return false;
+      await c.from('recordings').delete().eq('user_id', u.id).eq('id', id); return true; } catch (e) { return false; }
+  },
 
   // hard-delete everything this user has in the cloud (right to erasure)
   async deleteAllCloud() {

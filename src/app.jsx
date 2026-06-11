@@ -42,6 +42,7 @@ function AppProvider() {
     if (opts.convo) setConvoId(opts.convo);
     if (opts.from) setConvoFrom(opts.from);
     if (opts.rec !== undefined) setViewConvo(opts.rec);
+    if (opts.ask !== undefined) setAskFocus(opts.ask);
     setRoute(r);
     try { location.hash = r; } catch (e) {}
     const sc = document.querySelector('.app-scroll'); if (sc) sc.scrollTop = 0;
@@ -84,7 +85,10 @@ function AppProvider() {
   // ----- user's real recordings/uploads (session) — shared across Analyze + Recordings -----
   const [clips, setClips] = React.useState([]);
   const [viewClip, setViewClip] = React.useState(null); // clip whose insights to open on Analyze
-  const addClip = React.useCallback((clip) => setClips(cs => [clip, ...cs].slice(0, 20)), []);
+  const addClip = React.useCallback((clip) => {
+    setClips(cs => [clip, ...cs].slice(0, 50));
+    try { if (window.KithraCloud && window.KithraCloud.configured()) window.KithraCloud.saveRecording(clip); } catch (e) {}
+  }, []);
   const removeClip = React.useCallback((id) => setClips(cs => {
     const gone = cs.find(c => c.id === id);
     if (gone && gone.url) { try { URL.revokeObjectURL(gone.url); } catch(e){} }
@@ -120,6 +124,39 @@ function AppProvider() {
   const withdrawConsent = React.useCallback((purpose) => setConsents(c => { const n = { ...c, [purpose]: { granted:false, at:Date.now(), version:CONSENT_VERSION } }; persistConsents(n); return n; }), []);
   const hasConsent = React.useCallback((purpose) => !!(consents[purpose] && consents[purpose].granted), [consents]);
 
+  // ----- real account session (Supabase) + cross-session recording memory -----
+  const [user, setUser] = React.useState(undefined); // undefined = checking, null = signed out
+  const refreshUser = React.useCallback(async () => {
+    try { const u = await (window.KithraCloud && window.KithraCloud.getUser && window.KithraCloud.getUser()); setUser(u || null); return u || null; }
+    catch (e) { setUser(null); return null; }
+  }, []);
+  React.useEffect(() => { refreshUser(); }, []);
+  const [localOnly, setLocalOnlyState] = React.useState(() => { try { return localStorage.getItem('kithra_local_ok') === '1'; } catch(e){ return false; } });
+  const setLocalOnly = React.useCallback((v) => { setLocalOnlyState(v); try { v ? localStorage.setItem('kithra_local_ok','1') : localStorage.removeItem('kithra_local_ok'); } catch(e){} }, []);
+  // when signed in, pull saved recordings (metadata+transcripts) into the session
+  React.useEffect(() => {
+    let on = true;
+    (async () => {
+      if (!user) return;
+      try {
+        const rows = await (window.KithraCloud && window.KithraCloud.fetchRecordings && window.KithraCloud.fetchRecordings());
+        if (on && Array.isArray(rows)) setClips(cs => { const have = new Set(cs.map(c => c.id)); return [...cs, ...rows.filter(r => !have.has(r.id))]; });
+      } catch (e) {}
+    })();
+    return () => { on = false; };
+  }, [user]);
+  const updateClip = React.useCallback((id, patch) => {
+    setClips(cs => cs.map(c => {
+      if (c.id !== id) return c;
+      const next = { ...c, ...patch };
+      try { if (window.KithraCloud && window.KithraCloud.configured()) window.KithraCloud.saveRecording(next); } catch (e) {}
+      return next;
+    }));
+  }, []);
+
+  // ----- "ask about this recording" focus -----
+  const [askFocus, setAskFocus] = React.useState(null);
+
   // ----- PII redaction preference (applies to transcripts before display/storage) -----
   const [redact, setRedactState] = React.useState(() => { try { return localStorage.getItem('kithra_redact') !== '0'; } catch(e){ return true; } });
   const setRedact = React.useCallback((v) => { setRedactState(v); try { localStorage.setItem('kithra_redact', v ? '1' : '0'); } catch(e){} }, []);
@@ -150,6 +187,8 @@ function AppProvider() {
     books, addBook, updateBook, removeBook,
     consents, grantConsent, withdrawConsent, hasConsent,
     redact, setRedact,
+    user, refreshUser, localOnly, setLocalOnly, updateClip,
+    askFocus, setAskFocus,
   };
 
   // ----- apply tokens to root -----
@@ -161,11 +200,20 @@ function AppProvider() {
   };
 
   const isApp = ROUTES[route]?.app;
+  // real login gate: app screens require an account when the cloud is configured
+  // (small "use offline" escape keeps the local-first promise)
+  const cloudConfigured = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
+  const needLogin = isApp && cloudConfigured && user === null && !localOnly;
+  const checking = isApp && cloudConfigured && user === undefined && !localOnly;
 
   return (
     <AppContext.Provider value={ctx}>
       <div id="lumen-root" data-theme={t.theme} data-mode={t.mode} data-accent={t.accent} style={rootStyle}>
-        {isApp ? <AppShell /> : <FullScreen route={route} />}
+        {checking
+          ? <div className="center" style={{ height:'100%' }}><LiveWave bars={14} height={28} /></div>
+          : needLogin
+            ? (window.Auth ? <window.Auth gate /> : null)
+            : isApp ? <AppShell /> : <FullScreen route={route} />}
         {window.LiveCaptureHost ? <LiveCaptureHost /> : null}
         {window.PermissionGate ? <PermissionGate /> : null}
         {window.Toast ? <Toast /> : null}
