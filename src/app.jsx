@@ -64,9 +64,9 @@ function AppProvider() {
   const [dashRange, setDashRange] = React.useState('30d');
   const [plan, setPlanState] = React.useState(() => { try { return localStorage.getItem('kithra_plan') || 'free'; } catch(e){ return 'free'; } });
   const setPlan = React.useCallback((p) => { setPlanState(p); try { localStorage.setItem('kithra_plan', p); } catch(e){} }, []);
-  const planAllows = React.useCallback((tier) => ({free:0,plus:1,premium:2}[plan] ?? 0) >= ({free:0,plus:1,premium:2}[tier] ?? 0), [plan]);
-  const plus = plan !== 'free';
   const setPlus = React.useCallback((v) => setPlan(v ? 'plus' : 'free'), [setPlan]);
+  // NOTE: `plus`, `planAllows` and `effectivePlan` are owner-aware and defined
+  // below, once the signed-in `user` is known (see "owner all-access").
   const [wiped, setWiped] = React.useState(false);
   const [toast, setToastState] = React.useState(null);
   const toastTimer = React.useRef(null);
@@ -131,6 +131,18 @@ function AppProvider() {
     catch (e) { setUser(null); return null; }
   }, []);
   React.useEffect(() => { refreshUser(); }, []);
+  // ----- owner all-access -----
+  // This specific account gets every feature unlocked, for free, while still
+  // signing in normally. The email comes from the authenticated Supabase
+  // session, so access follows the real logged-in identity.
+  const OWNER_EMAILS = ['saraswatpraveen21@gmail.com'];
+  const isOwner = !!(user && user.email && OWNER_EMAILS.includes(String(user.email).trim().toLowerCase()));
+  const effectivePlan = isOwner ? 'premium' : plan;
+  const plus = effectivePlan !== 'free';
+  const planAllows = React.useCallback(
+    (tier) => isOwner || (({ free:0, plus:1, premium:2 }[plan] ?? 0) >= ({ free:0, plus:1, premium:2 }[tier] ?? 0)),
+    [plan, isOwner]
+  );
   // re-check the session when the tab regains focus (e.g. returning from the
   // Google OAuth redirect) so the login gate clears without a manual reload.
   React.useEffect(() => {
@@ -186,7 +198,7 @@ function AppProvider() {
             authNext, setAuthNext, authMode, setAuthMode, dashRange, setDashRange },
     voicePrefs, setVoice,
     capture, openCapture, closeCapture, minimizeCapture, expandCapture, setCapMode,
-    plus, setPlus, plan, setPlan, planAllows, wiped, setWiped, toast, showToast, perms, savePerms,
+    plus, setPlus, plan: effectivePlan, setPlan, planAllows, isOwner, wiped, setWiped, toast, showToast, perms, savePerms,
     sidebarCollapsed, setSidebarCollapsed,
     clips, addClip, removeClip, viewClip, setViewClip,
     convoFrom, viewConvo, setViewConvo,
