@@ -32,7 +32,7 @@ function Pricing() {
   const { mode, go, plan, setPlan, user, showToast } = useApp();
   const Cloud = window.KithraCloud;
   const isBiz = mode === 'business';
-  const [annual, setAnnual] = React.useState(true);
+  const [annual, setAnnual] = React.useState(false); // show the headline $30 / $90 first
   const [cur, setCur] = React.useState('USD');
   const [busy, setBusy] = React.useState('');
 
