@@ -3,6 +3,7 @@ import * as ReactDOM from 'react-dom/client';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 import { LiveCaptureHost } from './screens-capture.jsx';
 import { Toast, PermissionGate } from './screens-system.jsx';
+import { MobileHeader, MobileTabBar, useIsMobile } from './mobile-nav.jsx';
 /* ============================================================
    LUMEN — app shell, router, provider, tweaks
    ============================================================ */
@@ -258,6 +259,7 @@ function FullScreen({ route }) {
 /* ---------- app shell ---------- */
 function AppShell() {
   const { route } = useApp();
+  const isMobile = useIsMobile();
   const map = {
     dashboard: window.Dashboard,
     conversation: window.Conversation,
@@ -272,13 +274,14 @@ function AppShell() {
   };
   const Screen = map[route] || window.Dashboard;
   return (
-    <div className="app">
-      <Sidebar />
+    <div className={`app${isMobile ? ' is-mobile' : ''}`}>
+      {!isMobile && <Sidebar />}
       <div className="app-main">
-        <Topbar />
+        {isMobile ? <MobileHeader /> : <Topbar />}
         <div className="app-scroll scroll">
           {Screen ? <Screen /> : <Placeholder name={route} />}
         </div>
+        {isMobile && <MobileTabBar />}
       </div>
     </div>
   );

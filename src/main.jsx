@@ -11,6 +11,7 @@ import './styles/styles.css';
 import './styles/landing.css';
 import './styles/screens.css';
 import './styles/futuristic.css'; // 3D / futuristic layer — overrides via the cascade
+import './styles/mobile.css'; // phone-native chrome (bottom tab bar, header, sheets) — last
 
 // Mock data + Web-Speech voice helper — set window.LUMEN / window.LumenVoice.
 import './data.js';
