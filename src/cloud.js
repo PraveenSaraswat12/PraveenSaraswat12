@@ -83,6 +83,31 @@ const Cloud = {
   async signIn(email, password) { const c = await getClient(); if (!c) throw new Error('Connect your cloud first'); const { data, error } = await c.auth.signInWithPassword({ email, password }); if (error) throw error; return data; },
   async signOut() { const c = await getClient(); if (c) await c.auth.signOut(); },
 
+  // ---- Google sign-in (OAuth redirect) ----
+  // Returns to the current URL; Supabase picks the session out of the hash on
+  // return (detectSessionInUrl). Requires the Google provider + this redirect
+  // URL to be enabled in Supabase → Authentication → Providers / URL config.
+  async signInWithGoogle(redirectTo) {
+    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
+    const { data, error } = await c.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: redirectTo || window.location.href, queryParams: { prompt: 'select_account' } },
+    });
+    if (error) throw error; return data;
+  },
+
+  // ---- phone number + OTP (SMS) ----
+  // Sends a one-time code by SMS; verify exchanges it for a session.
+  // Requires an SMS provider (Twilio etc.) set in Supabase → Auth → Providers → Phone.
+  async sendPhoneOtp(phone) {
+    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
+    const { data, error } = await c.auth.signInWithOtp({ phone }); if (error) throw error; return data;
+  },
+  async verifyPhoneOtp(phone, token) {
+    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
+    const { data, error } = await c.auth.verifyOtp({ phone, token, type: 'sms' }); if (error) throw error; return data;
+  },
+
   // book sync (called from the app whenever the library changes, if signed in)
   // notes are encrypted on-device before upload
   async syncBooks(books) {
@@ -182,6 +207,33 @@ const Cloud = {
     const j = await res.json();
     if (j.error) throw new Error(j.error);
     return j.text || '';
+  },
+
+  // ---- payments (Razorpay via the `payments` Edge Function) ----
+  // The Razorpay secret stays server-side; the function holds the price table
+  // (client can't tamper with amounts) and verifies the signature on return.
+  async _payFetch(body) {
+    const cfg = getConfig(); if (!cfg) throw new Error('Cloud not configured');
+    const c = await getClient();
+    let token = cfg.SUPABASE_ANON_KEY;
+    try { const { data } = await c.auth.getSession(); if (data?.session?.access_token) token = data.session.access_token; } catch (e) {}
+    const res = await fetch(`${cfg.SUPABASE_URL}/functions/v1/payments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, 'apikey': cfg.SUPABASE_ANON_KEY },
+      body: JSON.stringify(body),
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.error) throw new Error(j.error || ('Payment request failed (' + res.status + ')'));
+    return j;
+  },
+  createOrder(plan, period, currency) { return Cloud._payFetch({ action: 'order', plan, period, currency }); },
+  verifyPayment(payload) { return Cloud._payFetch({ action: 'verify', ...payload }); },
+  async getSubscription() {
+    try {
+      const c = await getClient(); if (!c) return null; const u = await Cloud.getUser(); if (!u) return null;
+      const { data } = await c.from('subscriptions').select('*').eq('user_id', u.id).maybeSingle();
+      return data || null;
+    } catch (e) { return null; }
   },
 };
 

@@ -48,6 +48,23 @@ drop policy if exists "own consents" on public.consents;
 create policy "own consents" on public.consents
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+-- Subscriptions (written by the payments Edge Function via the service role).
+-- The client can READ its own row to know which plan is active; it cannot write
+-- it — only a verified Razorpay payment does, server-side.
+create table if not exists public.subscriptions (
+  user_id    uuid primary key references auth.users(id) on delete cascade,
+  plan       text not null default 'free',
+  status     text not null default 'inactive',
+  provider   text,
+  order_id   text,
+  payment_id text,
+  updated_at timestamptz default now()
+);
+alter table public.subscriptions enable row level security;
+drop policy if exists "own subscription read" on public.subscriptions;
+create policy "own subscription read" on public.subscriptions
+  for select using (auth.uid() = user_id);
+
 -- Private storage bucket for audio files + book covers.
 insert into storage.buckets (id, name, public)
   values ('audio', 'audio', false)

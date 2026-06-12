@@ -131,8 +131,14 @@ function AppProvider() {
     catch (e) { setUser(null); return null; }
   }, []);
   React.useEffect(() => { refreshUser(); }, []);
-  const [localOnly, setLocalOnlyState] = React.useState(() => { try { return localStorage.getItem('kithra_local_ok') === '1'; } catch(e){ return false; } });
-  const setLocalOnly = React.useCallback((v) => { setLocalOnlyState(v); try { v ? localStorage.setItem('kithra_local_ok','1') : localStorage.removeItem('kithra_local_ok'); } catch(e){} }, []);
+  // re-check the session when the tab regains focus (e.g. returning from the
+  // Google OAuth redirect) so the login gate clears without a manual reload.
+  React.useEffect(() => {
+    const h = () => { if (document.visibilityState === 'visible') refreshUser(); };
+    document.addEventListener('visibilitychange', h);
+    window.addEventListener('focus', h);
+    return () => { document.removeEventListener('visibilitychange', h); window.removeEventListener('focus', h); };
+  }, [refreshUser]);
   // when signed in, pull saved recordings (metadata+transcripts) into the session
   React.useEffect(() => {
     let on = true;
@@ -187,7 +193,7 @@ function AppProvider() {
     books, addBook, updateBook, removeBook,
     consents, grantConsent, withdrawConsent, hasConsent,
     redact, setRedact,
-    user, refreshUser, localOnly, setLocalOnly, updateClip,
+    user, refreshUser, updateClip,
     askFocus, setAskFocus,
   };
 
@@ -200,11 +206,11 @@ function AppProvider() {
   };
 
   const isApp = ROUTES[route]?.app;
-  // real login gate: app screens require an account when the cloud is configured
-  // (small "use offline" escape keeps the local-first promise)
+  // real login gate: app screens require a real account (Google, phone OTP, or
+  // email). No offline / local-only escape — an account is always required.
   const cloudConfigured = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
-  const needLogin = isApp && cloudConfigured && user === null && !localOnly;
-  const checking = isApp && cloudConfigured && user === undefined && !localOnly;
+  const needLogin = isApp && cloudConfigured && user === null;
+  const checking = isApp && cloudConfigured && user === undefined;
 
   return (
     <AppContext.Provider value={ctx}>
@@ -289,7 +295,10 @@ function Sidebar() {
     <aside className={`side ${sidebarCollapsed?'collapsed':''}`}>
       <div className="side-brand">
         <LumenMark size={32} />
-        <span className="wordmark" style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:600, letterSpacing:'-.02em' }}>Kithra</span>
+        <div className="stack brand-text" style={{ gap:2, minWidth:0 }}>
+          <span className="wordmark" style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:600, letterSpacing:'-.02em', lineHeight:1 }}>Kithra</span>
+          <span className="brand-tag" style={{ fontFamily:'var(--font-display)', fontStyle:'italic', fontSize:10.5, color:'var(--ink-3)', letterSpacing:'.01em', whiteSpace:'nowrap' }}>Where talk becomes insight</span>
+        </div>
       </div>
       {groups.map(g => (
         <div className="nav-group" key={g.key}>
@@ -340,8 +349,17 @@ function Topbar() {
 }
 
 /* ---------- account menu ---------- */
+// derive a friendly name + initials from the real Supabase user
+function userIdentity(user) {
+  const md = (user && user.user_metadata) || {};
+  const name = md.full_name || md.name || (user && user.email) || (user && user.phone) || 'Your account';
+  const sub = (user && user.email) || (user && user.phone) || 'Signed in';
+  const initials = String(name).replace(/[^A-Za-z0-9 ]/g, ' ').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase() || 'K';
+  const avatar = md.avatar_url || md.picture || null;
+  return { name, sub, initials, avatar };
+}
 function AccountMenu() {
-  const { go, plan, mode, showToast } = useApp();
+  const { go, plan, mode, user, refreshUser, showToast } = useApp();
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
   React.useEffect(() => {
@@ -350,23 +368,34 @@ function AccountMenu() {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
+  const id = userIdentity(user);
   const items = [
     { ic:'user', label:'Profile', act:()=>go('privacy') },
     { ic:'spark', label:'Plans & billing', act:()=>go('pricing') },
     { ic:'layers', label:'My recordings', act:()=>go('library') },
     { ic:'shield', label:'Privacy & data', act:()=>go('privacy') },
   ];
+  const signOut = async () => {
+    setOpen(false);
+    try { await (window.KithraCloud && window.KithraCloud.signOut && window.KithraCloud.signOut()); } catch (e) {}
+    try { await refreshUser(); } catch (e) {}
+    showToast('Signed out', 'check');
+    go('landing');
+  };
+  const AvatarEl = ({ size }) => id.avatar
+    ? <img src={id.avatar} alt="" width={size} height={size} style={{ borderRadius:'50%', objectFit:'cover', display:'block' }} />
+    : <Avatar label={id.initials} color="var(--viz-1)" size={size} />;
   return (
     <div className="dd" ref={ref}>
       <button onClick={()=>setOpen(o=>!o)} style={{ border:0, background:'transparent', padding:0, cursor:'pointer', borderRadius:'50%' }} aria-label="Account">
-        <Avatar label="DR" color="var(--viz-1)" size={36} />
+        <AvatarEl size={36} />
       </button>
       {open && (
         <div className="dd-menu" style={{ minWidth:230, right:0, left:'auto' }}>
           <div className="row" style={{ gap:10, padding:'8px 10px 10px' }}>
-            <Avatar label="DR" color="var(--viz-1)" size={34} />
+            <AvatarEl size={34} />
             <div className="stack" style={{ gap:1, minWidth:0 }}>
-              <span style={{ fontWeight:700, fontSize:13.5 }}>Dana Rivera</span>
+              <span style={{ fontWeight:700, fontSize:13.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{id.name}</span>
               <span className="faint tcap" style={{ fontSize:11.5 }}>{plan} plan · {mode}</span>
             </div>
           </div>
@@ -375,7 +404,7 @@ function AccountMenu() {
             <button key={i} className="dd-item" onClick={()=>{ setOpen(false); it.act(); }}><Icon name={it.ic} size={16} /><span className="grow" style={{ textAlign:'left' }}>{it.label}</span></button>
           ))}
           <div className="hr" style={{ margin:'5px 0' }} />
-          <button className="dd-item" onClick={()=>{ setOpen(false); go('landing'); }}><Icon name="home" size={16} /><span className="grow" style={{ textAlign:'left' }}>Sign out</span></button>
+          <button className="dd-item" onClick={signOut}><Icon name="arrowR" size={16} /><span className="grow" style={{ textAlign:'left' }}>Sign out</span></button>
         </div>
       )}
     </div>
@@ -411,11 +440,17 @@ function PlanPill() {
           <div className="faint" style={{ fontSize:11, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase', padding:'6px 10px 4px' }}>Your plan</div>
           {PLANS.map(p => (
             <button key={p.k} className={`dd-item ${p.k===plan?'on':''}`} style={{ height:'auto', padding:'9px 11px', alignItems:'flex-start' }}
-              onClick={()=>{ setPlan(p.k); setOpen(false); showToast(p.k==='free'?'Switched to Free':`${p.label} active — features unlocked`, p.k==='free'?'check':'spark'); }}>
+              onClick={()=>{
+                setOpen(false);
+                if (p.k===plan) return;
+                // downgrade to Free is instant; paid tiers go through real checkout
+                if (p.k==='free') { setPlan('free'); showToast('Switched to Free', 'check'); }
+                else go('pricing');
+              }}>
               <span className="center" style={{ width:24, height:24, borderRadius:7, background:`color-mix(in srgb,${p.color} 16%, transparent)`, color:p.color, flex:'none', marginTop:1 }}><Icon name="spark" size={13} fill={p.k!=='free'} /></span>
               <span className="stack grow" style={{ gap:1, minWidth:0 }}>
                 <span style={{ fontWeight:700, fontSize:13.5 }}>{p.label}</span>
-                <span className="faint" style={{ fontSize:11.5, lineHeight:1.3 }}>{p.sub}</span>
+                <span className="faint" style={{ fontSize:11.5, lineHeight:1.3 }}>{p.sub}{p.k!=='free' ? (p.k==='premium'?' · $90/mo':' · $30/mo') : ''}</span>
               </span>
               {p.k===plan && <Icon name="check" size={15} stroke={2.6} style={{ marginTop:3 }} />}
             </button>

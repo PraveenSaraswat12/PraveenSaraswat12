@@ -57,6 +57,7 @@ const ICONS = {
   book:'M5 5a2 2 0 012-2h11v15H7a2 2 0 00-2 2zM18 18H7a2 2 0 00-2 2M9 7h6M9 10h4',
   leaf:'M4 20c0-9 7-15 16-14 1 9-5 15-14 14zM5 19c3-6 8-9 12-10',
   stethoscope:'M6 4v5a4 4 0 008 0V4M6 4H4M14 4h2M10 17a4 4 0 008 0v-2M18 13a1.5 1.5 0 100 .01',
+  phone:'M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z',
 };
 function Icon({ name, size = 20, stroke = 2, fill = false, className = '', style }) {
   const d = ICONS[name] || '';

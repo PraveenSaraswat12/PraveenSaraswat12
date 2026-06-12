@@ -269,7 +269,7 @@ textarea.field{height:auto;padding:12px 14px;resize:none;line-height:1.5}
 [data-theme="dark"] .nav-item.active{color:var(--ink)}
 .nav-item .ic{flex:none}
 .nav-item .lbl{overflow:hidden;text-overflow:ellipsis}
-.side.collapsed .lbl,.side.collapsed .nav-label,.side.collapsed .side-brand .wordmark{display:none}
+.side.collapsed .lbl,.side.collapsed .nav-label,.side.collapsed .side-brand .wordmark,.side.collapsed .side-brand .brand-text{display:none}
 .side.collapsed .side-card{display:none}
 .side.collapsed .side-brand{justify-content:center}
 .side.collapsed .nav-item{justify-content:center;padding:0}
