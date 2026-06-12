@@ -141,7 +141,9 @@ const Cloud = {
     try {
       const c = await getClient(); if (!c) return false;
       const u = await Cloud.getUser(); if (!u) return false;
-      await c.from('recordings').upsert({ id: rec.id, user_id: u.id, name: rec.name || null, duration: rec.durSec || null, source: rec.source || null, analysis: rec.analysis || null, transcript: rec.transcript ? await encStr(rec.transcript) : null });
+      // insights are AI-derived from the transcript, so encrypt them on-device too
+      const insights = rec.insights ? await encStr(JSON.stringify(rec.insights)) : null;
+      await c.from('recordings').upsert({ id: rec.id, user_id: u.id, name: rec.name || null, duration: rec.durSec || null, source: rec.source || null, analysis: rec.analysis || null, transcript: rec.transcript ? await encStr(rec.transcript) : null, insights });
       return true;
     } catch (e) { return false; }
   },
@@ -151,11 +153,15 @@ const Cloud = {
       const c = await getClient(); if (!c) return null;
       const u = await Cloud.getUser(); if (!u) return null;
       const { data } = await c.from('recordings').select('*').order('created_at', { ascending: false }).limit(50);
-      return await Promise.all((data || []).map(async (r) => ({
-        id: r.id, name: r.name, durSec: r.duration, source: r.source || 'upload',
-        analysis: r.analysis, transcript: await decStr(r.transcript),
-        ts: r.created_at ? new Date(r.created_at).getTime() : Date.now(), cloud: true,
-      })));
+      return await Promise.all((data || []).map(async (r) => {
+        let insights = null;
+        if (r.insights) { try { insights = JSON.parse(await decStr(r.insights)); } catch (e) { insights = null; } }
+        return {
+          id: r.id, name: r.name, durSec: r.duration, source: r.source || 'upload',
+          analysis: r.analysis, transcript: await decStr(r.transcript), insights,
+          ts: r.created_at ? new Date(r.created_at).getTime() : Date.now(), cloud: true,
+        };
+      }));
     } catch (e) { return null; }
   },
   async deleteRecording(id) {

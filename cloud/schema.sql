@@ -18,7 +18,7 @@ drop policy if exists "own books" on public.books;
 create policy "own books" on public.books
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
--- Recordings + their analysis/transcript
+-- Recordings + their analysis/transcript/insights
 create table if not exists public.recordings (
   id         text primary key,
   user_id    uuid not null references auth.users(id) on delete cascade,
@@ -27,8 +27,11 @@ create table if not exists public.recordings (
   source     text,
   analysis   jsonb,
   transcript text,
+  insights   text,           -- AI insight card (encrypted on-device JSON)
   created_at timestamptz default now()
 );
+-- back-fill the column on projects created before insights existed
+alter table public.recordings add column if not exists insights text;
 alter table public.recordings enable row level security;
 drop policy if exists "own recordings" on public.recordings;
 create policy "own recordings" on public.recordings

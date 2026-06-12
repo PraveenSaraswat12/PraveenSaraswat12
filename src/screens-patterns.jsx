@@ -7,7 +7,27 @@ import { askKithra, aiReady } from './ai.js';
    (no sample data; AI pattern-read via Gemini on demand)
    ============================================================ */
 function Patterns() {
-  const { go, mode, clips, books, hasConsent, grantConsent, showToast } = useApp();
+  const { go, mode, clips, books, hasConsent, grantConsent, showToast, planAllows } = useApp();
+
+  // Plan gate: Patterns (trends + AI pattern-read) is a Plus feature. Block the
+  // screen itself, not just the nav item, so no entry path (hash, search, deep
+  // links) can reach the content on Free.
+  if (!planAllows('plus')) {
+    return (
+      <div className="page">
+        <div className="card center anim-up" style={{ padding:'64px 24px' }}>
+          <div className="stack center" style={{ gap:14, maxWidth:440, textAlign:'center' }}>
+            <span className="center" style={{ width:58, height:58, borderRadius:18, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="lock" size={26} /></span>
+            <span className="lock-pill" data-tier="plus"><Icon name="lock" size={9} />Plus</span>
+            <h3 className="display" style={{ fontSize:22, margin:0 }}>Patterns is a Plus feature</h3>
+            <p className="muted" style={{ margin:0, fontSize:14, lineHeight:1.55 }}>Upgrade to Plus to see how your pace, pausing, talk-balance and energy trend across every recording — plus Kithra’s AI read of what’s actually changing.</p>
+            <button className="btn btn-primary btn-lg" onClick={()=>go('pricing')}><Icon name="spark" size={18} fill />Upgrade to Plus</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const ordered = [...(clips||[])].sort((x,y)=>(x.ts||0)-(y.ts||0));
   const a = (c)=>c.analysis||{};
   const series = (f)=> ordered.map(c=>({ v:f(a(c)), name:c.name })).filter(p=>p.v!=null);
