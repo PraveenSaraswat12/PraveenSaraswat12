@@ -1,0 +1,141 @@
+/* ============================================================
+   KITHRA — Futuristic / 3D layer  (imported LAST, overrides via cascade)
+   Goal: a premium "conversation-intelligence console" — depth, glass,
+   ambient aurora, neon accents, 3D lift — without hurting readability.
+   Works in both dark (hero look) and light (frosted) themes.
+   Respects prefers-reduced-motion (all motion freezes).
+   ============================================================ */
+
+/* ---- ambient palette tokens (per theme) ---- */
+[data-theme="dark"]{
+  --fx-a:color-mix(in srgb,var(--accent) 46%, transparent);
+  --fx-b:color-mix(in srgb,var(--viz-5) 40%, transparent);
+  --fx-c:color-mix(in srgb,var(--viz-2) 26%, transparent);
+  --fx-aurora:.55;
+  --fx-glass:color-mix(in srgb,var(--surface) 78%, transparent);
+  --fx-edge:rgba(255,255,255,.10);
+}
+[data-theme="light"]{
+  --fx-a:color-mix(in srgb,var(--accent) 16%, transparent);
+  --fx-b:color-mix(in srgb,var(--viz-5) 13%, transparent);
+  --fx-c:color-mix(in srgb,var(--viz-2) 11%, transparent);
+  --fx-aurora:.42;
+  --fx-glass:color-mix(in srgb,#ffffff 72%, transparent);
+  --fx-edge:rgba(255,255,255,.7);
+}
+
+/* ---- ambient aurora backdrop (drifts slowly behind everything) ---- */
+#lumen-root{position:relative;isolation:isolate}
+#lumen-root::before{
+  content:'';position:fixed;inset:-25%;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(38% 44% at 18% 22%, var(--fx-a), transparent 70%),
+    radial-gradient(42% 42% at 82% 14%, var(--fx-b), transparent 70%),
+    radial-gradient(48% 52% at 72% 86%, var(--fx-c), transparent 72%);
+  filter:blur(46px) saturate(125%);
+  opacity:var(--fx-aurora);
+  animation:fxDrift 32s var(--ease) infinite alternate;
+  will-change:transform;
+}
+@keyframes fxDrift{
+  0%  {transform:translate3d(-2%,-1%,0) scale(1.02) rotate(0deg)}
+  50% {transform:translate3d(2%,2%,0)   scale(1.08) rotate(2deg)}
+  100%{transform:translate3d(-1%,3%,0)  scale(1.04) rotate(-2deg)}
+}
+/* let the aurora show through the app frame in both themes */
+.app,.lp,.ob,.proc-wrap{background:transparent}
+
+/* ---- glass surfaces (sidebar / topbar / dropdowns) ---- */
+.side{
+  background:var(--fx-glass);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:1px 0 0 var(--fx-edge) inset;
+}
+.dd-menu{
+  background:var(--fx-glass);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:0 1px 0 var(--fx-edge) inset, var(--shadow-3);
+}
+.topbar{box-shadow:0 1px 0 var(--fx-edge) inset}
+
+/* ---- cards: floating glass planes with a light top edge ---- */
+.card{position:relative}
+.card::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:0 1px 0 var(--fx-edge) inset;
+}
+[data-theme="light"] .card{
+  box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 6px 18px rgba(28,30,64,.06), 0 2px 6px rgba(28,30,64,.05);
+}
+
+/* ---- 3D lift on interactive cards / rows ---- */
+.card-hover,.price-card,.winrow,.lrow{
+  transition:transform .22s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease);
+}
+.card-hover:hover,.price-card:hover{transform:translateY(-4px) scale(1.006)}
+[data-theme="light"] .card-hover:hover,[data-theme="light"] .price-card:hover{
+  box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px rgba(28,30,64,.14), 0 0 0 1px color-mix(in srgb,var(--accent) 16%, transparent);
+}
+[data-theme="dark"] .card-hover:hover,[data-theme="dark"] .price-card:hover{
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset, 0 22px 50px rgba(0,0,0,.55), 0 0 26px color-mix(in srgb,var(--accent) 18%, transparent);
+}
+
+/* recommended plan floats + breathes a neon frame */
+.price-card.pop{
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--pc,var(--accent)) 40%, transparent), 0 18px 50px color-mix(in srgb,var(--pc,var(--accent)) 22%, transparent);
+  animation:fxFloat 7s var(--ease) infinite;
+}
+@keyframes fxFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+/* ---- luminous primary buttons with a sweeping sheen ---- */
+.btn-primary{position:relative;overflow:hidden}
+.btn-primary::before{
+  content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);
+  transform:skewX(-18deg);transition:left .55s var(--ease);
+}
+.btn-primary:hover::before{left:130%}
+[data-theme="light"] .btn-primary{
+  box-shadow:0 2px 10px color-mix(in srgb,var(--accent) 38%, transparent), 0 1px 0 rgba(255,255,255,.35) inset;
+}
+
+/* ---- gradient brandmark + display headings (subtle, stays legible) ---- */
+.wordmark,.brand-tag{
+  background:linear-gradient(96deg, var(--ink), color-mix(in srgb,var(--accent) 78%, var(--ink)) 55%, color-mix(in srgb,var(--viz-2) 70%, var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+}
+.display{
+  background:linear-gradient(98deg, var(--ink) 30%, color-mix(in srgb,var(--accent) 42%, var(--ink)) 78%, color-mix(in srgb,var(--viz-5) 46%, var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+}
+/* keep the big numbers crisp but give them a faint accent glow */
+.metric-num{text-shadow:0 0 22px color-mix(in srgb,var(--accent) 16%, transparent)}
+
+/* brandmark glow */
+.side-brand svg{filter:drop-shadow(0 0 10px color-mix(in srgb,var(--accent) 38%, transparent))}
+
+/* ---- refined focus glow ---- */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%, transparent)}
+.field:focus,.field:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%, transparent)}
+
+/* ---- futuristic thin scrollbars ---- */
+.scroll,.app-scroll{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 40%, transparent) transparent}
+.scroll::-webkit-scrollbar,.app-scroll::-webkit-scrollbar{width:10px;height:10px}
+.scroll::-webkit-scrollbar-thumb,.app-scroll::-webkit-scrollbar-thumb{
+  background:color-mix(in srgb,var(--accent) 36%, transparent);border-radius:999px;border:3px solid transparent;background-clip:content-box;
+}
+.scroll::-webkit-scrollbar-thumb:hover,.app-scroll::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--accent) 60%, transparent);background-clip:content-box}
+
+/* ---- search box gets a quiet glow on hover ---- */
+.searchbox:hover{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%, transparent)}
+
+/* ============================================================
+   Respect reduced-motion: freeze all ambient + hover motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce){
+  #lumen-root::before{animation:none}
+  .price-card.pop{animation:none}
+  .btn-primary::before{transition:none}
+  .card-hover,.price-card,.winrow,.lrow{transition:box-shadow .2s, border-color .2s}
+  .card-hover:hover,.price-card:hover{transform:none}
+}
