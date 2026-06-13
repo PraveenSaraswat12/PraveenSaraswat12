@@ -327,7 +327,7 @@ function Sidebar() {
           <span className="ic"><Icon name={sidebarCollapsed?'chevR':'chevL'} size={19} /></span>
           <span className="lbl">Collapse</span>
         </a>
-        <a className="nav-item" onClick={()=>go('landing')} title="Sign out">
+        <a className="nav-item" onClick={()=>go('dashboard')} title="Dashboard">
           <span className="ic"><Icon name="home" size={19} /></span>
           <span className="lbl">Home</span>
         </a>
