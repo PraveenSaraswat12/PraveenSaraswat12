@@ -1,0 +1,6 @@
+{
+  "appId": "com.kithra.app",
+  "appName": "Kithra",
+  "webDir": "dist",
+  "server": { "androidScheme": "https" }
+}
