@@ -20,7 +20,7 @@ function Patterns() {
             <span className="center" style={{ width:58, height:58, borderRadius:18, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="lock" size={26} /></span>
             <span className="lock-pill" data-tier="plus"><Icon name="lock" size={9} />Plus</span>
             <h3 className="display" style={{ fontSize:22, margin:0 }}>Patterns is a Plus feature</h3>
-            <p className="muted" style={{ margin:0, fontSize:14, lineHeight:1.55 }}>Upgrade to Plus to see how your pace, pausing, talk-balance and energy trend across every recording — plus Kithra’s AI read of what’s actually changing.</p>
+            <p className="muted" style={{ margin:0, fontSize:14, lineHeight:1.55 }}>Upgrade to Plus to see how your pace, pausing, talk-balance and energy trend across every recording — plus a Kithra AI read of what’s actually changing.</p>
             <button className="btn btn-primary btn-lg" onClick={()=>go('pricing')}><Icon name="spark" size={18} fill />Upgrade to Plus</button>
           </div>
         </div>
@@ -88,8 +88,8 @@ function Patterns() {
       ) : (
         <>
           {/* AI pattern read */}
-          <Panel title="Kithra’s pattern read" sub="Kithra’s AI, across every recording you’ve made" style={{ marginBottom:'var(--gap)' }}
-            action={<Badge kind="accent" dot={busy}>AI</Badge>}>
+          <Panel title="Kithra’s pattern read" sub="Kithra AI, across every recording you’ve made" style={{ marginBottom:'var(--gap)' }}
+            action={<Badge kind="accent" dot={busy}>Kithra AI</Badge>}>
             {read
               ? <div className="stack" style={{ gap:12 }}><p style={{ margin:0, fontSize:14.5, lineHeight:1.65 }}>{read}</p>
                   <button className="btn btn-soft btn-sm" style={{ alignSelf:'flex-start' }} disabled={busy} onClick={runRead}><Icon name="refresh" size={14} />Refresh</button></div>

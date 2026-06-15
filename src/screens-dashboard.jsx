@@ -137,15 +137,15 @@ function Dashboard() {
           </div>
 
           <div className="grid g-2" style={{ gap:'var(--gap)', marginBottom:'var(--gap)' }}>
-            <Panel title="Kithra’s read" sub={`A real AI brief across your ${(clips||[]).length} recording${(clips||[]).length>1?'s':''}`}
-              action={<Badge kind="accent" dot={briefState==='run'}>AI</Badge>}>
+            <Panel title="Kithra’s read" sub={`A real Kithra AI brief across your ${(clips||[]).length} recording${(clips||[]).length>1?'s':''}`}
+              action={<Badge kind="accent" dot={briefState==='run'}>Kithra AI</Badge>}>
               {briefState==='idle' && (
                 <div className="stack" style={{ gap:12 }}>
                   <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.6 }}>Ask Kithra to read across everything you’ve recorded{transcribed<(clips||[]).length?` (${(clips||[]).length-transcribed} not transcribed yet — transcripts make this sharper)`:''} and give you the headline.</p>
                   {window.KithraAI && window.KithraAI.aiReady()
                     ? (hasConsent('cloud_ai')
                         ? <button className="btn btn-primary btn-sm" style={{ alignSelf:'flex-start' }} onClick={runBrief}><Icon name="spark" size={14} fill />Generate my brief</button>
-                        : <button className="btn btn-primary btn-sm" style={{ alignSelf:'flex-start' }} onClick={()=>go('privacy')}><Icon name="shield" size={14} />Allow cloud AI first (Privacy → Consent)</button>)
+                        : <button className="btn btn-primary btn-sm" style={{ alignSelf:'flex-start' }} onClick={()=>go('privacy')}><Icon name="shield" size={14} />Allow Kithra AI first (Privacy → Consent)</button>)
                     : <span className="faint" style={{ fontSize:12.5 }}>Connect the cloud in Privacy & Data to enable this.</span>}
                 </div>
               )}

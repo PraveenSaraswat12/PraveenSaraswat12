@@ -419,7 +419,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
     if (clipId && final) updateClip(clipId, { transcript: final }); // flows to Library, Insights & Ask
   };
   const runCloud = async () => {
-    setState('running'); setEngine('Cloud · accurate');
+    setState('running'); setEngine('Kithra AI');
     const audio = await to16kMono(clipUrl);
     const b64 = floatToWavBase64(audio, 16000);
     const t = await window.KithraCloud.transcribe(b64, { mimeType: 'audio/wav', language: lang || undefined, context: ctx || undefined });
@@ -443,14 +443,14 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
     try { if (wantCloud) await runCloud(); else await runLocal(); }
     catch (e) {
       setErr(wantCloud
-        ? 'Cloud transcription failed: ' + (e && e.message ? e.message : e) + '. Make sure the AI function is deployed, or switch to on-device.'
+        ? 'Kithra AI transcription failed: ' + (e && e.message ? e.message : e) + '. Make sure Kithra AI is connected, or switch to on-device.'
         : 'Couldn’t run on-device transcription here. Try Chrome with a stable connection.');
       setState('error');
     }
   };
   const consentAndRun = async () => {
     grantConsent('cloud_transcription'); setAskConsent(false);
-    try { await runCloud(); } catch (e) { setErr('Cloud transcription failed: ' + (e && e.message ? e.message : e)); setState('error'); }
+    try { await runCloud(); } catch (e) { setErr('Kithra AI transcription failed: ' + (e && e.message ? e.message : e)); setState('error'); }
   };
   const ins = state === 'done' ? transcriptInsights(text, durSec) : null;
   const langSelect = (
@@ -478,7 +478,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
       style={{ height: 34, flex: '1 1 240px', minWidth: 180 }} />
   );
   return (
-    <Panel title="Transcript" sub={cloudOn && useCloud ? 'Cloud transcription — opt-in, consent required' : 'Runs privately on your device, no upload'}>
+    <Panel title="Transcript" sub={cloudOn && useCloud ? 'Kithra AI transcription — opt-in, consent required' : 'Runs privately on your device, no upload'}>
       {askConsent && createPortal(
         <div className="lc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setAskConsent(false); }}>
           <div className="lc-card card" style={{ width: 'min(480px,94vw)' }}>
@@ -487,7 +487,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
               <h2 className="display" style={{ fontSize: 20, margin: 0 }}>Send this clip to the cloud?</h2>
             </div>
             <p className="muted" style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.6 }}>
-              To transcribe accurately, <strong>this audio clip</strong> will be sent to Kithra’s server and AI — used <strong>only for transcription</strong>, never for training, and not stored after processing. You can withdraw this consent anytime in <strong>Privacy &amp; Data → Consent</strong>.
+              To transcribe accurately, <strong>this audio clip</strong> will be sent to Kithra AI — used <strong>only for transcription</strong>, never for training, and not stored after processing. You can withdraw this consent anytime in <strong>Privacy &amp; Data → Consent</strong>.
             </p>
             <p className="faint" style={{ margin: '0 0 14px', fontSize: 12.5, lineHeight: 1.5 }}>If the recording includes other people, make sure they’re okay with it. Prefer full privacy? Use on-device — nothing leaves your device.</p>
             <div className="stack" style={{ gap: 8 }}>
@@ -503,17 +503,17 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
         <div className="stack" style={{ gap: 12 }}>
           {cloudOn && (
             <div className="seg" role="tablist" aria-label="Transcription engine" style={{ alignSelf: 'flex-start' }}>
-              <button className={useCloud ? 'on' : ''} onClick={() => setUseCloud(true)} role="tab" aria-selected={useCloud}>Cloud · accurate</button>
+              <button className={useCloud ? 'on' : ''} onClick={() => setUseCloud(true)} role="tab" aria-selected={useCloud}>Kithra AI</button>
               <button className={!useCloud ? 'on' : ''} onClick={() => setUseCloud(false)} role="tab" aria-selected={!useCloud}>On-device · private</button>
             </div>
           )}
           <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>
             {cloudOn && useCloud
-              ? 'High accuracy with accents and names (Whisper, cloud). Opt-in: you’ll be asked for consent before any audio leaves this device. Add names/terms below so they’re spelled right.'
+              ? 'High accuracy with accents and names (Kithra AI). Opt-in: you’ll be asked for consent before any audio leaves this device. Add names/terms below so they’re spelled right.'
               : 'On-device transcription — private, nothing leaves your device. The first run downloads a model (~145 MB).'}
           </p>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}</div>
-          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn && useCloud ? 'Transcribe (accurate)' : 'Transcribe on-device'}</button>
+          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn && useCloud ? 'Transcribe with Kithra AI' : 'Transcribe on-device'}</button>
         </div>
       )}
       {state === 'loading' && (
@@ -587,16 +587,16 @@ function AiInsightsPanel({ clipId, res, durSec, mode }) {
     { ic: 'bolt', label: 'Best next step', text: data && data.next, bg: 'var(--accent-soft)', col: 'var(--accent-strong)' },
   ];
   return (
-    <Panel title="AI insights" sub={transcript ? 'Read by Kithra’s AI from your transcript' : 'Transcribe above for the richest read — works on acoustics alone too'}>
+    <Panel title="AI insights" sub={transcript ? 'Read by Kithra AI from your transcript' : 'Transcribe above for the richest read — works on acoustics alone too'}>
       {askConsent && createPortal(
         <div className="lc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setAskConsent(false); }}>
           <div className="lc-card card" style={{ width: 'min(480px,94vw)' }}>
             <div className="row" style={{ gap: 10, marginBottom: 10 }}>
               <span className="center" style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', color: 'var(--accent-strong)', flex: 'none' }}><Icon name="shield" size={18} /></span>
-              <h2 className="display" style={{ fontSize: 20, margin: 0 }}>Let Kithra’s AI read this recording?</h2>
+              <h2 className="display" style={{ fontSize: 20, margin: 0 }}>Let Kithra AI read this recording?</h2>
             </div>
             <p className="muted" style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.6 }}>
-              This recording’s {transcript ? 'transcript and ' : ''}metrics go to Kithra’s AI to compose your insights — used <strong>only to answer you</strong>, never for training. Withdraw anytime in <strong>Privacy &amp; Data → Consent</strong>.
+              This recording’s {transcript ? 'transcript and ' : ''}metrics go to Kithra AI to compose your insights — used <strong>only to answer you</strong>, never for training. Withdraw anytime in <strong>Privacy &amp; Data → Consent</strong>.
             </p>
             <div className="stack" style={{ gap: 8 }}>
               <button className="btn btn-primary btn-lg" onClick={consentAndRun}><Icon name="check" size={16} />Allow &amp; generate</button>
