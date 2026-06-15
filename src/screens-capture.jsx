@@ -20,7 +20,7 @@ function lumenContext(mode) {
 }
 
 function LiveCaptureHost() {
-  const { capture, closeCapture, minimizeCapture, expandCapture, setCapMode, mode, voicePrefs, go } = useApp();
+  const { capture, closeCapture, minimizeCapture, expandCapture, setCapMode, mode, voicePrefs, go, clips, books } = useApp();
   const V = window.LumenVoice || {};
   const capMode = capture.capMode || 'listen';
   const ctx = React.useMemo(() => lumenContext(mode), [mode]);
@@ -64,16 +64,19 @@ function LiveCaptureHost() {
   const replyTo = async (userText) => {
     busyRef.current = true; setThinking(true);
     let reply = '';
-    if (window.claude && typeof window.claude.complete === 'function') {
+    const Cloud = window.KithraCloud, AI = window.KithraAI;
+    if (Cloud && AI && AI.aiReady && AI.aiReady()) {
       try {
+        const realCtx = AI.buildContext({ clips, books, mode });
         const hist = exRef.current.slice(-4).map(e=>`${e.role==='me'?'User':'Kithra'}: ${e.text}`).join('\n');
-        const sys = `You are Kithra, a calm, private voice companion in a live ${mode==='business'?'work':'personal'} conversation. Use the user's history for continuity and reference it naturally when relevant. CONTEXT: ${ctx.blurb}\n${hist?'RECENT TURNS:\n'+hist+'\n':''}Reply in ${replyLang}, in 1–3 short, warm, spoken sentences. Plain text only. User just said: "${userText}"`;
-        reply = capStripMd(await window.claude.complete(sys) || '');
+        const sys = `You are Kithra, a calm, private voice companion in a live ${mode==='business'?'work':'personal'} conversation. Ground everything in the user's REAL recordings below; never invent recordings, names or quotes. Reply in ${replyLang}, in 1–3 short, warm, spoken sentences. Plain text only.`;
+        const prompt = `CONTEXT ABOUT THE USER'S REAL DATA:\n${realCtx}\n\n${hist?'RECENT TURNS:\n'+hist+'\n\n':''}The user just said: "${userText}"`;
+        reply = capStripMd(await Cloud.askAI(prompt, sys) || '');
       } catch(e) {}
     }
     if (!reply) reply = mode==='business'
-      ? `Got it. That connects to what I heard in ${ctx.titles[0]} — want me to pull the thread together?`
-      : `I hear you. That echoes a pattern from your recent reflections — want to sit with it a moment?`;
+      ? `Got it — tell me a bit more and I’ll connect it to what I’ve heard from you before.`
+      : `I hear you. Want to sit with that a moment, or unpack it a little?`;
     setThinking(false);
     setExchanges(p=>[...p,{role:'ai',text:reply}]);
     const after = () => { busyRef.current=false; if (wantRef.current) startTurn(); };

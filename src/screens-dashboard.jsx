@@ -138,7 +138,7 @@ function Dashboard() {
 
           <div className="grid g-2" style={{ gap:'var(--gap)', marginBottom:'var(--gap)' }}>
             <Panel title="Kithra’s read" sub={`A real AI brief across your ${(clips||[]).length} recording${(clips||[]).length>1?'s':''}`}
-              action={<Badge kind="accent" dot={briefState==='run'}>Gemini</Badge>}>
+              action={<Badge kind="accent" dot={briefState==='run'}>AI</Badge>}>
               {briefState==='idle' && (
                 <div className="stack" style={{ gap:12 }}>
                   <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.6 }}>Ask Kithra to read across everything you’ve recorded{transcribed<(clips||[]).length?` (${(clips||[]).length-transcribed} not transcribed yet — transcripts make this sharper)`:''} and give you the headline.</p>

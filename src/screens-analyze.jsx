@@ -164,11 +164,12 @@ function Analyze() {
         setClipId(id);
         addClip({ id, name: r.name, url, durSec: r.duration, peaks: r.peaks, source, analysis: r, ts: Date.now() });
       } catch (e) {}
-      // optional: natural-language summary via Claude if available
-      if (window.claude && typeof window.claude.complete === 'function') {
+      // natural-language summary via Kithra's AI (Groq) when the cloud is connected
+      if (window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured()) {
         try {
-          const prompt = `You are Kithra, a calm conversation-intelligence assistant. Based ONLY on these acoustic measurements of one audio recording, write exactly 2 warm, insightful sentences addressed to the speaker. Plain text only — no heading, no markdown, no bullet points, no bold. Do not invent words spoken or topics (this is acoustic-only). Metrics: duration ${fmtTime(r.duration)}, active-voice ${Math.round(r.talkRatio*100)}%, pace ~${r.wpm} wpm, ${r.pauses} pauses, expressiveness ${r.expressiveness}/100, brightness ${r.brightness}/100.`;
-          const out = await window.claude.complete(prompt);
+          const sys = 'You are Kithra, a calm conversation-intelligence assistant. Plain text only — no heading, no markdown, no bullet points, no bold.';
+          const prompt = `Based ONLY on these acoustic measurements of one audio recording, write exactly 2 warm, insightful sentences addressed to the speaker. Do not invent words spoken or topics (this is acoustic-only). Metrics: duration ${fmtTime(r.duration)}, active-voice ${Math.round(r.talkRatio*100)}%, pace ~${r.wpm} wpm, ${r.pauses} pauses, expressiveness ${r.expressiveness}/100, brightness ${r.brightness}/100.`;
+          const out = await window.KithraCloud.askAI(prompt, sys);
           const clean = (out || '').replace(/^#+\s.*$/gm, '').replace(/[*_`#>]/g, '').replace(/\n{2,}/g, ' ').replace(/\s+/g, ' ').trim();
           if (clean) setAiSummary(clean);
         } catch (e) {}
@@ -418,7 +419,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
     if (clipId && final) updateClip(clipId, { transcript: final }); // flows to Library, Insights & Ask
   };
   const runCloud = async () => {
-    setState('running'); setEngine('Cloud · Google');
+    setState('running'); setEngine('Cloud · accurate');
     const audio = await to16kMono(clipUrl);
     const b64 = floatToWavBase64(audio, 16000);
     const t = await window.KithraCloud.transcribe(b64, { mimeType: 'audio/wav', language: lang || undefined, context: ctx || undefined });
@@ -486,7 +487,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
               <h2 className="display" style={{ fontSize: 20, margin: 0 }}>Send this clip to the cloud?</h2>
             </div>
             <p className="muted" style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.6 }}>
-              To transcribe accurately, <strong>this audio clip</strong> will be sent to Kithra’s server and Google’s AI — used <strong>only for transcription</strong>, never for training, and not stored after processing. You can withdraw this consent anytime in <strong>Privacy &amp; Data → Consent</strong>.
+              To transcribe accurately, <strong>this audio clip</strong> will be sent to Kithra’s server and AI — used <strong>only for transcription</strong>, never for training, and not stored after processing. You can withdraw this consent anytime in <strong>Privacy &amp; Data → Consent</strong>.
             </p>
             <p className="faint" style={{ margin: '0 0 14px', fontSize: 12.5, lineHeight: 1.5 }}>If the recording includes other people, make sure they’re okay with it. Prefer full privacy? Use on-device — nothing leaves your device.</p>
             <div className="stack" style={{ gap: 8 }}>
@@ -508,7 +509,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
           )}
           <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>
             {cloudOn && useCloud
-              ? 'High accuracy with accents and names (Google Gemini). Opt-in: you’ll be asked for consent before any audio leaves this device. Add names/terms below so they’re spelled right.'
+              ? 'High accuracy with accents and names (Whisper, cloud). Opt-in: you’ll be asked for consent before any audio leaves this device. Add names/terms below so they’re spelled right.'
               : 'On-device transcription — private, nothing leaves your device. The first run downloads a model (~145 MB).'}
           </p>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}</div>
@@ -541,6 +542,99 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}
             <button className="btn btn-soft btn-sm" onClick={run}><Icon name="refresh" size={14} />Re-run</button>
           </div>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+// ---- real AI insights for one recording (summary / win / improve / next) via Groq ----
+function AiInsightsPanel({ clipId, res, durSec, mode }) {
+  const { clips, updateClip, hasConsent, grantConsent } = useApp();
+  const clip = (clips || []).find(c => c.id === clipId) || null;
+  const transcript = (clip && clip.transcript) || '';
+  const [state, setState] = React.useState((clip && clip.insights) ? 'done' : 'idle'); // idle | running | done | error
+  const [data, setData] = React.useState((clip && clip.insights) || null);
+  const [err, setErr] = React.useState('');
+  const [askConsent, setAskConsent] = React.useState(false);
+  const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
+
+  React.useEffect(() => { if (clip && clip.insights) { setData(clip.insights); setState('done'); } }, [clipId]);
+
+  const runNow = async () => {
+    setState('running'); setErr('');
+    try {
+      const focusClip = { id: clipId, name: res.name, analysis: res, transcript, durSec };
+      const out = await window.KithraAI.clipInsights(focusClip, mode);
+      setData(out); setState('done');
+      if (clipId) updateClip(clipId, { insights: out }); // persists + flows to Dashboard/Ask/cloud
+    } catch (e) {
+      setErr('Couldn’t generate insights just now (' + ((e && e.message) || 'network') + '). Try again in a moment.');
+      setState('error');
+    }
+  };
+  const run = () => {
+    setErr('');
+    if (!cloudOn) { setErr('Connect the cloud first in Privacy & Data → Cloud & account.'); setState('error'); return; }
+    if (!hasConsent('cloud_ai')) { setAskConsent(true); return; }
+    runNow();
+  };
+  const consentAndRun = () => { grantConsent('cloud_ai'); setAskConsent(false); runNow(); };
+
+  const cards = [
+    { ic: 'check', label: 'What went well', text: data && data.win, bg: 'var(--good-soft)', col: 'var(--good)' },
+    { ic: 'trend', label: 'To improve', text: data && data.improve, bg: 'var(--accent-soft)', col: 'var(--accent-strong)' },
+    { ic: 'bolt', label: 'Best next step', text: data && data.next, bg: 'var(--accent-soft)', col: 'var(--accent-strong)' },
+  ];
+  return (
+    <Panel title="AI insights" sub={transcript ? 'Read by Kithra’s AI from your transcript' : 'Transcribe above for the richest read — works on acoustics alone too'}>
+      {askConsent && createPortal(
+        <div className="lc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setAskConsent(false); }}>
+          <div className="lc-card card" style={{ width: 'min(480px,94vw)' }}>
+            <div className="row" style={{ gap: 10, marginBottom: 10 }}>
+              <span className="center" style={{ width: 36, height: 36, borderRadius: 11, background: 'var(--accent-soft)', color: 'var(--accent-strong)', flex: 'none' }}><Icon name="shield" size={18} /></span>
+              <h2 className="display" style={{ fontSize: 20, margin: 0 }}>Let Kithra’s AI read this recording?</h2>
+            </div>
+            <p className="muted" style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.6 }}>
+              This recording’s {transcript ? 'transcript and ' : ''}metrics go to Kithra’s AI to compose your insights — used <strong>only to answer you</strong>, never for training. Withdraw anytime in <strong>Privacy &amp; Data → Consent</strong>.
+            </p>
+            <div className="stack" style={{ gap: 8 }}>
+              <button className="btn btn-primary btn-lg" onClick={consentAndRun}><Icon name="check" size={16} />Allow &amp; generate</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAskConsent(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {state === 'idle' && (
+        <div className="stack" style={{ gap: 10 }}>
+          <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>
+            Kithra reads {transcript ? 'your transcript' : 'this recording’s acoustics'} and gives you a short summary, what went well, one thing to improve, and your best next step.
+          </p>
+          <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />Generate AI insights</button>
+        </div>
+      )}
+      {state === 'running' && (
+        <div className="row" style={{ gap: 12 }}><LiveWave bars={22} height={34} color="var(--accent)" /><span className="faint" style={{ fontSize: 13 }}>Thinking through your recording…</span></div>
+      )}
+      {state === 'error' && (
+        <div className="stack" style={{ gap: 10 }}><p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>{err}</p><button className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}>Try again</button></div>
+      )}
+      {state === 'done' && data && (
+        <div className="stack" style={{ gap: 10 }}>
+          {data.summary && <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6 }}>{data.summary}</p>}
+          <div className="grid g-2">
+            {cards.filter(c => c.text).map((c, i) => (
+              <div key={i} className="row" style={{ gap: 11, padding: '12px 14px', borderRadius: 'var(--r-ctrl)', background: 'var(--surface-2)', border: '1px solid var(--line)', alignItems: 'flex-start' }}>
+                <span className="center" style={{ width: 34, height: 34, borderRadius: 10, background: c.bg, color: c.col, flex: 'none' }}><Icon name={c.ic} size={17} /></span>
+                <div className="stack" style={{ gap: 2, minWidth: 0 }}>
+                  <span className="faint" style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase' }}>{c.label}</span>
+                  <span style={{ fontSize: 13.5, lineHeight: 1.5 }}>{c.text}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="refresh" size={13} />Regenerate</button>
         </div>
       )}
     </Panel>
@@ -604,6 +698,7 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, clipId, planAllows, go 
       {planAllows && planAllows('plus') ? (
        <>
         {clipUrl && <TranscriptPanel clipUrl={clipUrl} clipId={clipId} durSec={res.duration} />}
+        {clipId && <AiInsightsPanel clipId={clipId} res={res} durSec={res.duration} mode={mode} />}
         <Panel title="Speaking insights" sub="A coaching read from your real acoustics">
           <div className="grid g-2">
             {speakingInsights(res).map((it,i)=>(

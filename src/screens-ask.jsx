@@ -99,8 +99,8 @@ function AskKithra() {
         <span className="vchip ghost" title="What Kithra can see right now">
           <Icon name="layers" size={14} />{(clips||[]).length} recording{(clips||[]).length===1?'':'s'} · {transcribed} transcribed · {(books||[]).length} books
         </span>
-        <span className={`vchip ${ready?'on':''}`} title={ready?'Connected to Gemini through your private cloud':'Cloud not connected'}>
-          <Icon name="bolt" size={14} />{ready?'Gemini live':'Offline'}
+        <span className={`vchip ${ready?'on':''}`} title={ready?'Connected to Kithra’s AI through your private cloud':'Cloud not connected'}>
+          <Icon name="bolt" size={14} />{ready?'AI live':'Offline'}
         </span>
         <button className={`vchip ${voicePrefs.voiceReply?'on':''}`} onClick={()=>{ if(voicePrefs.voiceReply) stopSpeaking(); setVoice({voiceReply:!voicePrefs.voiceReply}); }} title="Speak answers aloud">
           <Icon name={voicePrefs.voiceReply?'wave':'pause'} size={15} />{voicePrefs.voiceReply?'Voice on':'Voice off'}
@@ -171,7 +171,7 @@ function AskKithra() {
         {needConsent && (
           <div className="card anim-in" style={{ padding:'14px 16px', marginBottom:10, border:'1px solid color-mix(in srgb,var(--accent) 30%,transparent)', background:'var(--accent-soft)' }}>
             <div className="row" style={{ gap:10, marginBottom:8 }}><Icon name="shield" size={17} style={{ color:'var(--accent-strong)' }} /><span style={{ fontWeight:700, fontSize:13.5 }}>Allow Kithra to send context to the AI?</span></div>
-            <p className="muted" style={{ margin:'0 0 10px', fontSize:12.5, lineHeight:1.5 }}>Your question plus recording summaries{transcribed>0?' and transcripts':''} go to Google’s AI to compose the answer — never for training, withdrawable anytime in Privacy → Consent.</p>
+            <p className="muted" style={{ margin:'0 0 10px', fontSize:12.5, lineHeight:1.5 }}>Your question plus recording summaries{transcribed>0?' and transcripts':''} go to Kithra’s AI to compose the answer — never for training, withdrawable anytime in Privacy → Consent.</p>
             <div className="row" style={{ gap:8 }}>
               <button className="btn btn-primary btn-sm" onClick={allowAndSend}><Icon name="check" size={14} />Allow & ask</button>
               <button className="btn btn-ghost btn-sm" onClick={()=>setNeedConsent(false)}>Not now</button>
@@ -203,7 +203,7 @@ function AskKithra() {
             onKeyDown={e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } }} />
           <button className="btn btn-icon btn-primary" style={{ width:42, height:42 }} onClick={()=>send()} aria-label="Send"><Icon name="send" size={18} /></button>
         </div>
-        <div className="center" style={{ marginTop:8 }}><span className="faint" style={{ fontSize:11.5 }}>Answers are grounded in your real recordings · powered by Gemini through your private cloud</span></div>
+        <div className="center" style={{ marginTop:8 }}><span className="faint" style={{ fontSize:11.5 }}>Answers are grounded in your real recordings · powered by Kithra’s AI through your private cloud</span></div>
       </div>
     </div>
   );

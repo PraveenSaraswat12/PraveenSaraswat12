@@ -88,7 +88,7 @@ function Patterns() {
       ) : (
         <>
           {/* AI pattern read */}
-          <Panel title="Kithra’s pattern read" sub="Gemini, across every recording you’ve made" style={{ marginBottom:'var(--gap)' }}
+          <Panel title="Kithra’s pattern read" sub="Kithra’s AI, across every recording you’ve made" style={{ marginBottom:'var(--gap)' }}
             action={<Badge kind="accent" dot={busy}>AI</Badge>}>
             {read
               ? <div className="stack" style={{ gap:12 }}><p style={{ margin:0, fontSize:14.5, lineHeight:1.65 }}>{read}</p>

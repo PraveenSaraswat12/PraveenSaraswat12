@@ -57,10 +57,10 @@ function CloudAccount() {
   };
   const signOut = async () => { await Cloud.signOut(); setUser(null); showToast('Signed out', 'check'); };
   return (
-    <Panel title="Cloud & account" sub="Optional — sync across devices + Gemma AI, on your own free Supabase">
+    <Panel title="Cloud & account" sub="Optional — sync across devices + cloud AI, on your own free Supabase">
       {!connected ? (
         <div className="stack" style={{ gap: 12 }}>
-          <p className="muted" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55 }}>Kithra works on this device with no account. To sync your books &amp; recordings and turn on Gemma AI, connect a free Supabase project (5-minute setup in <code>cloud/README.md</code>).</p>
+          <p className="muted" style={{ margin: 0, fontSize: 13.5, lineHeight: 1.55 }}>Kithra works on this device with no account. To sync your books &amp; recordings and turn on cloud AI, connect a free Supabase project (5-minute setup in <code>cloud/README.md</code>).</p>
           <label className="stack" style={{ gap: 5 }}><span className="eyebrow">Supabase Project URL</span><input className="field" style={{ height: 40 }} value={url} onChange={e => setUrl(e.target.value)} placeholder="https://xxxx.supabase.co" /></label>
           <label className="stack" style={{ gap: 5 }}><span className="eyebrow">anon public key</span><input className="field" style={{ height: 40 }} value={key} onChange={e => setKey(e.target.value)} placeholder="eyJhbGciOi…" /></label>
           {err && <span style={{ color: 'var(--bad)', fontSize: 12.5 }}>{err}</span>}
