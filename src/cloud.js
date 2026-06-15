@@ -83,6 +83,23 @@ const Cloud = {
   async signIn(email, password) { const c = await getClient(); if (!c) throw new Error('Connect your cloud first'); const { data, error } = await c.auth.signInWithPassword({ email, password }); if (error) throw error; return data; },
   async signOut() { const c = await getClient(); if (c) await c.auth.signOut(); },
 
+  // ---- password reset: email a link, then set a new password on return ----
+  async resetPassword(email, redirectTo) {
+    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
+    const { error } = await c.auth.resetPasswordForEmail(String(email).trim(), { redirectTo: redirectTo || window.location.href });
+    if (error) throw error; return true;
+  },
+  async updatePassword(newPassword) {
+    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
+    const { data, error } = await c.auth.updateUser({ password: newPassword });
+    if (error) throw error; return data;
+  },
+  async onPasswordRecovery(cb) {
+    const c = await getClient(); if (!c) return () => {};
+    const { data } = c.auth.onAuthStateChange((event) => { if (event === 'PASSWORD_RECOVERY') { try { cb(); } catch (e) {} } });
+    return () => { try { data.subscription.unsubscribe(); } catch (e) {} };
+  },
+
   // ---- Google sign-in (OAuth redirect) ----
   // Returns to the current URL; Supabase picks the session out of the hash on
   // return (detectSessionInUrl). Requires the Google provider + this redirect

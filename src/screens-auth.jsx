@@ -44,6 +44,10 @@ function Auth({ gate }) {
   const [err, setErr] = React.useState('');
   const [notice, setNotice] = React.useState('');
 
+  // password recovery (returning from a reset email)
+  const [recovery, setRecovery] = React.useState(false);
+  const [newPw, setNewPw] = React.useState('');
+
   const arrive = async (welcome) => {
     const u = await refreshUser();
     if (u) {
@@ -53,6 +57,15 @@ function Auth({ gate }) {
     }
     return u;
   };
+
+  // returning from a password-reset email puts the app in recovery mode
+  React.useEffect(() => {
+    if (!configured) return;
+    let off;
+    try { if (/type=recovery/.test(window.location.hash || '')) setRecovery(true); } catch (e) {}
+    if (Cloud.onPasswordRecovery) Cloud.onPasswordRecovery(() => setRecovery(true)).then((fn) => { off = fn; }).catch(() => {});
+    return () => { try { off && off(); } catch (e) {} };
+  }, [configured]);
 
   // ---- Google ----
   const google = async () => {
@@ -107,6 +120,26 @@ function Auth({ gate }) {
     setBusy(false);
   };
 
+  // ---- forgot / reset password ----
+  const forgot = async () => {
+    setErr(''); setNotice('');
+    const em = email.trim();
+    if (!/.+@.+\..+/.test(em)) { setErr('Type your email above first, then tap “Forgot password”.'); return; }
+    if (!configured) { setErr('Cloud isn’t configured on this build.'); return; }
+    setBusy(true);
+    try { await Cloud.resetPassword(em); setNotice('We’ve emailed you a reset link — open it on this device to set a new password.'); }
+    catch (e) { setErr((e && e.message) || String(e)); }
+    setBusy(false);
+  };
+  const setNewPassword = async () => {
+    setErr(''); setNotice('');
+    if ((newPw || '').length < 6) { setErr('New password needs at least 6 characters.'); return; }
+    setBusy(true);
+    try { await Cloud.updatePassword(newPw); setRecovery(false); await arrive('Password updated'); }
+    catch (e) { setErr((e && e.message) || String(e)); }
+    setBusy(false);
+  };
+
   const onKey = (fn) => (e) => { if (e.key === 'Enter') fn(); };
 
   return (
@@ -118,6 +151,22 @@ function Auth({ gate }) {
         </div>
 
         <div className="card card-pad anim-up" style={{ padding:'26px 24px' }}>
+          {recovery ? (
+            <div className="stack" style={{ gap:12 }}>
+              <div className="stack" style={{ gap:4 }}>
+                <h2 className="display" style={{ fontSize:20, margin:0 }}>Set a new password</h2>
+                <p className="muted" style={{ margin:0, fontSize:13, lineHeight:1.5 }}>You followed a reset link. Choose a new password to finish signing in.</p>
+              </div>
+              <label className="stack" style={{ gap:5 }}><span className="eyebrow">New password</span>
+                <div className="row" style={{ gap:8 }}>
+                  <input className="field grow" style={{ height:44 }} type={show?'text':'password'} autoComplete="new-password" value={newPw} onChange={e=>setNewPw(e.target.value)} placeholder="At least 6 characters" onKeyDown={onKey(setNewPassword)} />
+                  <button className="btn btn-soft btn-icon" style={{ height:44, width:44, flex:'none' }} onClick={()=>setShow(s=>!s)} aria-label={show?'Hide password':'Show password'}><Icon name="eye" size={17} /></button>
+                </div></label>
+              {err && <div className="row" style={{ gap:8, color:'var(--bad)', fontSize:13 }}><Icon name="x" size={14} />{err}</div>}
+              {notice && <div className="row" style={{ gap:8, color:'var(--good)', fontSize:13 }}><Icon name="check" size={14} />{notice}</div>}
+              <button className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={busy} onClick={setNewPassword}>{busy?'Saving…':<><Icon name="check" size={17} />Save new password</>}</button>
+            </div>
+          ) : (<>
           {/* Google first — fastest path */}
           <button className="btn btn-lg" style={{ width:'100%', gap:10, background:'#fff', color:'#1f2430', border:'1px solid var(--line)', fontWeight:600 }} disabled={busy} onClick={google}>
             <GoogleG size={18} /> Continue with Google
@@ -148,6 +197,7 @@ function Auth({ gate }) {
                   <input className="field grow" style={{ height:44 }} type={show?'text':'password'} autoComplete={kind==='up'?'new-password':'current-password'} value={pw} onChange={e=>setPw(e.target.value)} placeholder={kind==='up'?'Choose a password (6+ characters)':'Your password'} onKeyDown={onKey(submitEmail)} />
                   <button className="btn btn-soft btn-icon" style={{ height:44, width:44, flex:'none' }} onClick={()=>setShow(s=>!s)} aria-label={show?'Hide password':'Show password'}><Icon name="eye" size={17} /></button>
                 </div></label>
+              {kind==='in' && <button className="linkbtn" style={{ fontSize:12, alignSelf:'flex-end', marginTop:-2 }} disabled={busy} onClick={forgot}>Forgot password?</button>}
               {err && <div className="row" style={{ gap:8, color:'var(--bad)', fontSize:13 }}><Icon name="x" size={14} />{err}</div>}
               {notice && <div className="row" style={{ gap:8, color:'var(--good)', fontSize:13 }}><Icon name="check" size={14} />{notice}</div>}
               <button className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={busy} onClick={submitEmail}>
@@ -177,6 +227,7 @@ function Auth({ gate }) {
 
           <div className="hr" style={{ margin:'18px 0 12px' }} />
           <PrivacyChip text="Your account stores only what you choose to sync" />
+          </>)}
         </div>
 
         <div className="center"><button className="linkbtn" style={{ fontSize:12.5 }} onClick={()=>go('landing')}><Icon name="chevL" size={13} /> Back to home</button></div>
