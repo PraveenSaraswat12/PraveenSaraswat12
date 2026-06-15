@@ -18,6 +18,7 @@ import './data.js';
 import './voice.js';
 import './app-config.js'; // built-in Supabase project keys (anon = public)
 import './cloud.js'; // optional Supabase + Gemma backend (inert until connected)
+import './native-audio.js'; // window.KithraSystemAudio — native meeting/media capture (Android)
 
 // Pull every screen into the graph (mirrors the prototype's load order) so the
 // app shell can resolve all routes and the conditional hosts (capture/system).

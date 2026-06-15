@@ -147,6 +147,9 @@ function Analyze() {
   const streamRef = React.useRef(null);
   const chunksRef = React.useRef([]);
   const recTimerRef = React.useRef(null);
+  const sysTimerRef = React.useRef(null);
+  const sysActiveRef = React.useRef(false);
+  const [nativeCap, setNativeCap] = React.useState(false);
 
   const [clipId, setClipId] = React.useState(null);
   const handleFile = async (file) => {
@@ -216,7 +219,81 @@ function Analyze() {
     try { if (recRef.current && recRef.current.state !== 'inactive') { recRef.current.onstop = null; recRef.current.stop(); } } catch (e) {}
     clearInterval(recTimerRef.current); stopTracks(); reset();
   };
-  React.useEffect(() => () => { clearInterval(recTimerRef.current); stopTracks(); }, []);
+
+  // ---- native system / meeting audio capture (Android) → same analysis pipeline ----
+  const startSystemCapture = async () => {
+    setErr('');
+    const SA = window.KithraSystemAudio;
+    if (!SA) { setErr('Device-audio capture needs the Kithra mobile app.'); setStage('error'); return; }
+    try { await SA.start(); }
+    catch (e) {
+      const msg = (e && (e.message || e.errorMessage)) || '';
+      setErr(/deni|permission|cancel/i.test(msg)
+        ? 'Capture permission was declined. Allow it so Kithra can record meeting & media audio.'
+        : 'Could not start device-audio capture' + (msg ? ': ' + msg : '') + '.');
+      setStage('error'); return;
+    }
+    sysActiveRef.current = true;
+    setRecSecs(0); setStage('syscapturing');
+    sysTimerRef.current = setInterval(() => setRecSecs(s => s + 1), 1000);
+  };
+  const beginSystemCapture = () => {
+    let seen = false; try { seen = localStorage.getItem('kithra_rec_ack') === '1'; } catch (e) {}
+    if (!seen) { setStage('sysnotice'); return; }
+    startSystemCapture();
+  };
+  const stopSystemCapture = async () => {
+    if (!sysActiveRef.current) return;
+    sysActiveRef.current = false;
+    clearInterval(sysTimerRef.current);
+    try {
+      const r = await window.KithraSystemAudio.stop();
+      const blob = r && (r.blob || (r.url ? await (await fetch(r.url)).blob() : null));
+      const file = blob ? new File([blob], 'Meeting capture.wav', { type: (r && r.mimeType) || 'audio/wav' }) : null;
+      if (file) { handleFile(file); return; }
+      setErr('That capture came through empty — please try again.'); setStage('error');
+    } catch (e) {
+      setErr('Could not finish the capture. Please try again.'); setStage('error');
+    }
+  };
+  const cancelSystemCapture = async () => {
+    sysActiveRef.current = false;
+    clearInterval(sysTimerRef.current);
+    try { await window.KithraSystemAudio.stop(); } catch (e) {}
+    reset();
+  };
+
+  React.useEffect(() => () => { clearInterval(recTimerRef.current); clearInterval(sysTimerRef.current); stopTracks(); }, []);
+
+  // reveal the device-audio option only where it's supported (the native Android app)
+  React.useEffect(() => {
+    let alive = true;
+    (async () => { try { const ok = await window.KithraSystemAudio?.isSupported?.(); if (alive) setNativeCap(!!ok); } catch (e) {} })();
+    return () => { alive = false; };
+  }, []);
+
+  // capture ended from the system UI (notification / "stop casting") rather than our button
+  React.useEffect(() => {
+    const SA = window.KithraSystemAudio;
+    if (!SA || !SA.onStopped) return;
+    let cleanup = () => {};
+    const sub = SA.onStopped(async (ev) => {
+      if (!sysActiveRef.current) return;
+      sysActiveRef.current = false;
+      clearInterval(sysTimerRef.current);
+      try {
+        if (ev && ev.path && SA.fileFromPath) {
+          const { blob } = await SA.fileFromPath(ev.path);
+          const file = blob ? new File([blob], 'Meeting capture.wav', { type: 'audio/wav' }) : null;
+          if (file) { handleFile(file); return; }
+        }
+        setErr('That capture came through empty — please try again.'); setStage('error');
+      } catch (e) { setErr('Could not finish the capture.'); setStage('error'); }
+    });
+    if (sub && typeof sub.then === 'function') sub.then(h => { cleanup = () => { try { h.remove(); } catch (e) {} }; });
+    else if (sub && typeof sub.remove === 'function') cleanup = () => { try { sub.remove(); } catch (e) {} };
+    return () => cleanup();
+  }, []);
 
   // open a saved recording's insights (navigated from Recordings)
   React.useEffect(() => {
@@ -254,6 +331,11 @@ function Analyze() {
               <span style={{ width:9, height:9, borderRadius:'50%', background:'currentColor', display:'inline-block' }} />Record audio
             </button>
             <span className="btn btn-soft"><Icon name="upload" size={16} />Choose audio file</span>
+            {nativeCap && (
+              <button type="button" className="btn btn-soft" onClick={(e)=>{ e.stopPropagation(); beginSystemCapture(); }}>
+                <Icon name="layers" size={16} />Capture meeting audio
+              </button>
+            )}
           </div>
           <div style={{ marginTop:18, opacity:.6 }}><Waveform bars={44} seed={11} height={26} gap={3} color="var(--line-2)" /></div>
           <PrivacyChip text="Processed locally — never leaves your device" />
@@ -302,6 +384,42 @@ function Analyze() {
             <div className="row center" style={{ gap:10 }}>
               <button className="btn btn-primary" onClick={stopRecording}><Icon name="check" size={16} />Stop &amp; analyze</button>
               <button className="btn btn-ghost" onClick={cancelRecording}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {stage==='sysnotice' && (
+        <div className="card card-pad center" style={{ minHeight:240, textAlign:'center' }}>
+          <div className="stack center" style={{ gap:14, maxWidth:470 }}>
+            <span className="center" style={{ width:48, height:48, borderRadius:14, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="shield" size={24} /></span>
+            <h3 className="display" style={{ fontSize:21, margin:0 }}>Before you capture device audio</h3>
+            <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.6 }}>
+              Kithra records the audio playing on this device — meetings, videos, calls on speaker. If other people can be heard, the law in India (DPDP Act) and many places requires their <strong>informed consent</strong> first. Android won’t let any app capture the other party on a normal phone call — put the call on <strong>speakerphone</strong> so it plays through the device.
+            </p>
+            <div className="row center" style={{ gap:10 }}>
+              <button className="btn btn-primary" onClick={()=>{ try{ localStorage.setItem('kithra_rec_ack','1'); }catch(e){} startSystemCapture(); }}><Icon name="check" size={16} />I understand — capture</button>
+              <button className="btn btn-ghost" onClick={()=>setStage('idle')}>Cancel</button>
+            </div>
+            <button className="linkbtn" style={{ fontSize:12 }} onClick={()=>go('legal')}>Read the recording policy</button>
+          </div>
+        </div>
+      )}
+
+      {stage==='syscapturing' && (
+        <div className="card card-pad center" style={{ minHeight:280, textAlign:'center' }}>
+          <div className="stack center" style={{ gap:18, maxWidth:440 }}>
+            <span className="row center" style={{ gap:8, color:'var(--accent-strong)', fontWeight:700, fontSize:13, letterSpacing:'.04em' }}>
+              <span style={{ width:10, height:10, borderRadius:'50%', background:'var(--bad)', display:'inline-block' }} />CAPTURING DEVICE AUDIO
+            </span>
+            <LiveWave bars={36} height={70} color="var(--accent)" />
+            <div className="metric-num tnum" style={{ fontSize:34 }}>{fmtTime(recSecs)}</div>
+            <p className="faint" style={{ fontSize:13, margin:0, maxWidth:360, lineHeight:1.5 }}>
+              Recording everything playing on this device. You can switch to your meeting or video app — Kithra keeps capturing in the background with a quiet notification.
+            </p>
+            <div className="row center" style={{ gap:10 }}>
+              <button className="btn btn-primary" onClick={stopSystemCapture}><Icon name="check" size={16} />Stop &amp; analyze</button>
+              <button className="btn btn-ghost" onClick={cancelSystemCapture}>Cancel</button>
             </div>
           </div>
         </div>
