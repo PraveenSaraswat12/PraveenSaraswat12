@@ -538,7 +538,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
   const [askConsent, setAskConsent] = React.useState(false);
   const { hasConsent, grantConsent, redact, updateClip } = useApp();
   const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
-  const [useCloud, setUseCloud] = React.useState(cloudOn); // engine choice, user-visible
+  const [useCloud, setUseCloud] = React.useState(false); // default to on-device (private, no API cost); users can still switch to Kithra AI
   const finish = (t) => {
     const final = redact ? redactPII((t || '').trim()) : (t || '').trim();
     setText(final); setState('done');
