@@ -35,6 +35,7 @@ function LiveCaptureHost() {
   const [thinking, setThinking] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [askBg, setAskBg] = React.useState(false);
+  const [nativeCap, setNativeCap] = React.useState(false);
   const recRef = React.useRef(null);
   const wantRef = React.useRef(false);
   const busyRef = React.useRef(false);
@@ -44,6 +45,8 @@ function LiveCaptureHost() {
   React.useEffect(() => { const el = feedRef.current; if (el) el.scrollTop = el.scrollHeight; }, [exchanges, transcript, interim, thinking]);
   React.useEffect(() => () => { wantRef.current=false; busyRef.current=false; try{recRef.current&&recRef.current.stop();}catch(e){} V.stopSpeak&&V.stopSpeak(); }, []);
   React.useEffect(() => { if (!running) return; const id=setInterval(()=>setSecs(s=>s+1),1000); return ()=>clearInterval(id); }, [running]);
+  // native (Android) device-audio capture available? → reveal the option
+  React.useEffect(() => { let on=true; (async()=>{ try{ const ok=await window.KithraSystemAudio?.isSupported?.(); if(on) setNativeCap(!!ok); }catch(e){} })(); return ()=>{ on=false; }; }, []);
 
   const fmt = (s)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const words = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
@@ -108,6 +111,8 @@ function LiveCaptureHost() {
   const switchMode = (m) => { if (m===capMode) return; stop(); setCapMode(m); setSecs(0); };
   const fullClose = () => { stop(); setSecs(0); setTranscript(''); setExchanges([]); setInterim(''); closeCapture(); };
   const goBackground = () => { setAskBg(false); minimizeCapture(); };
+  // device / meeting audio capture is owned by the Analyze screen; route to it
+  const startDeviceCapture = () => { try { window.KithraAutoSysCapture = true; } catch(e){} fullClose(); go('analyze'); };
 
   const statusText = running ? (capMode==='converse'?'In conversation':'Listening') : 'Paused';
   const turns = exchanges.filter(e=>e.role==='me').length;
@@ -214,6 +219,12 @@ function LiveCaptureHost() {
             ? <button className="btn btn-soft btn-lg" onClick={()=>setAskBg(true)} title="Keep running in background"><Icon name="chevD" size={17} />Background</button>
             : <button className="btn btn-soft btn-lg" disabled={!transcript && exchanges.length===0} onClick={()=>{ stop(); closeCapture(); go('analyze'); }} title="Analyze captured audio"><Icon name="trend" size={17} />Analyze</button>}
         </div>
+
+        {nativeCap && !running && (
+          <button className="btn btn-soft btn-lg" style={{ width:'100%', marginTop:10 }} onClick={startDeviceCapture}>
+            <Icon name="layers" size={17} />Capture device / meeting audio
+          </button>
+        )}
 
         <div className="disclaimer" style={{ marginTop:16 }}>
           <span className="center" style={{ width:34, height:34, borderRadius:10, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name="lock" size={17} /></span>

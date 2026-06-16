@@ -272,6 +272,14 @@ function Analyze() {
     return () => { alive = false; };
   }, []);
 
+  // auto-start device capture when launched from the always-on capture overlay
+  React.useEffect(() => {
+    if (typeof window !== 'undefined' && window.KithraAutoSysCapture) {
+      window.KithraAutoSysCapture = false;
+      beginSystemCapture();
+    }
+  }, []);
+
   // capture ended from the system UI (notification / "stop casting") rather than our button
   React.useEffect(() => {
     const SA = window.KithraSystemAudio;
