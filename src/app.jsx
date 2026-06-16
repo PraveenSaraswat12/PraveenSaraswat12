@@ -348,7 +348,10 @@ function Topbar() {
     <header className="topbar">
       <h2 className="pt">{title}</h2>
       <div className="grow" />
-      <div className="searchbox click" style={{ width:230, maxWidth:'26vw' }} onClick={()=>go('ask')}>
+      <div className="searchbox click" style={{ width:230, maxWidth:'26vw' }} role="button" tabIndex={0}
+        aria-label="Ask across your data"
+        onClick={()=>go('ask')}
+        onKeyDown={(e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); go('ask'); } }}>
         <Icon name="search" size={17} />
         <span style={{ fontSize:13.5 }}>Ask across your data…</span>
         <span className="kbd" style={{ marginLeft:'auto' }}>⌘K</span>

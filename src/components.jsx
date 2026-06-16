@@ -292,7 +292,7 @@ function RealPlayer({ src, peaks, durSec = 0, accent = 'var(--accent)' }) {
       <button type="button" className="btn btn-icon btn-primary" style={{ width: 46, height: 46, borderRadius: '50%', flex: 'none' }} onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
         <Icon name={playing ? 'pause' : 'play'} size={19} fill />
       </button>
-      <div className="grow" style={{ minWidth: 0, cursor: 'pointer' }} onClick={seek} title="Click to seek">
+      <div className="grow" style={{ minWidth: 0, cursor: 'pointer' }} onClick={seek} title="Click to seek" aria-label="Seek through audio">
         {peaks && peaks.length
           ? <div className="wave" style={{ height: 44, '--wb-gap': '2px' }}>
               {peaks.map((h, i) => { const played = (i / peaks.length) <= frac; return <i key={i} style={{ height: `${Math.max(4, Math.round(h * 100))}%`, background: played ? accent : 'var(--line-2)' }} />; })}

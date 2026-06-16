@@ -256,7 +256,9 @@ export function MobileHeader() {
 
   return (
     <header className="mhead">
-      <div className="mhead-brand" onClick={() => go('dashboard')}>
+      <div className="mhead-brand" role="button" tabIndex={0} aria-label="Kithra home"
+        onClick={() => go('dashboard')}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go('dashboard'); } }}>
         <LumenMark size={28} />
       </div>
       <h1 className="mhead-title">{title}</h1>

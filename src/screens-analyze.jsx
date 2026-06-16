@@ -315,7 +315,7 @@ function Analyze() {
       <div className="row" style={{ justifyContent:'space-between', alignItems:'flex-end', marginBottom:8, flexWrap:'wrap', gap:14 }}>
         <div className="stack" style={{ gap:6 }}>
           <span className="eyebrow">Try it now</span>
-          <h1 className="display" style={{ fontSize:28, margin:0, whiteSpace:'nowrap' }}>Analyze a recording</h1>
+          <h1 className="display" style={{ fontSize:28, margin:0 }}>Analyze a recording</h1>
         </div>
         {stage==='done' && <button className="btn btn-soft" onClick={reset}><Icon name="refresh" size={16} />Analyze another</button>}
       </div>
@@ -600,6 +600,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
   );
   const ctxInput = (
     <input className="field" value={ctx} onChange={(e) => setCtx(e.target.value)}
+      aria-label="Names or terms to spell correctly"
       placeholder="Names / terms to spell right (e.g. Praveen, Houston, ATS)"
       style={{ height: 34, flex: '1 1 240px', minWidth: 180 }} />
   );

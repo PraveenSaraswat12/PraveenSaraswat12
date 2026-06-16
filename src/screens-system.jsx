@@ -7,8 +7,8 @@ function Toast() {
   const { toast } = useApp();
   if (!toast) return null;
   return (
-    <div className="kt-toast" key={toast.id}>
-      <span className="center" style={{ width:22, height:22, borderRadius:7, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }}><Icon name={toast.icon} size={13} stroke={2.6} /></span>
+    <div className="kt-toast" key={toast.id} role="status" aria-live="polite" aria-atomic="true">
+      <span className="center" style={{ width:22, height:22, borderRadius:7, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }} aria-hidden="true"><Icon name={toast.icon} size={13} stroke={2.6} /></span>
       <span style={{ fontSize:13.5, fontWeight:600 }}>{toast.msg}</span>
     </div>
   );

@@ -198,7 +198,7 @@ function AskKithra() {
           <button className={`mic-btn ${listening?'live':''}`} onClick={toggleMic} aria-label="Talk to Kithra" title="Ask by voice">
             <Icon name="mic" size={19} />
           </button>
-          <textarea rows={1} placeholder={listening?'Listening…':askFocus?`Ask about ${askFocus.name||'this recording'}…`:'Ask about your recordings…'}
+          <textarea rows={1} aria-label="Ask Kithra a question" placeholder={listening?'Listening…':askFocus?`Ask about ${askFocus.name||'this recording'}…`:'Ask about your recordings…'}
             value={input} onChange={e=>setInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } }} />
           <button className="btn btn-icon btn-primary" style={{ width:42, height:42 }} onClick={()=>send()} aria-label="Send"><Icon name="send" size={18} /></button>

@@ -134,13 +134,13 @@ function Pricing() {
           Listening, storage and backup are free for everyone, forever. Upgrade when you want Kithra to turn your recordings into insight.
         </p>
         <div className="row" style={{ gap:10, marginTop:8, flexWrap:'wrap', justifyContent:'center' }}>
-          <div className="seg">
-            <button className={!annual?'on':''} onClick={()=>setAnnual(false)}>Monthly</button>
-            <button className={annual?'on':''} onClick={()=>setAnnual(true)}>Annual · 2 months free</button>
+          <div className="seg" aria-label="Billing period">
+            <button className={!annual?'on':''} aria-pressed={!annual} onClick={()=>setAnnual(false)}>Monthly</button>
+            <button className={annual?'on':''} aria-pressed={annual} onClick={()=>setAnnual(true)}>Annual · 2 months free</button>
           </div>
-          <div className="seg">
-            <button className={cur==='USD'?'on':''} onClick={()=>setCur('USD')}>$ USD</button>
-            <button className={cur==='INR'?'on':''} onClick={()=>setCur('INR')}>₹ INR</button>
+          <div className="seg" aria-label="Currency">
+            <button className={cur==='USD'?'on':''} aria-pressed={cur==='USD'} onClick={()=>setCur('USD')}>$ USD</button>
+            <button className={cur==='INR'?'on':''} aria-pressed={cur==='INR'} onClick={()=>setCur('INR')}>₹ INR</button>
           </div>
         </div>
       </div>

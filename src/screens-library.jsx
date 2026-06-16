@@ -119,13 +119,13 @@ function Library() {
                   <div className="row" style={{ gap:6, flex:'none', flexWrap:'wrap' }}>
                     <button className="btn btn-soft btn-sm" title="Ask Kithra about this recording" onClick={()=>go('ask',{ask:c})}><Icon name="chat" size={14} />Ask</button>
                     <button className="btn btn-soft btn-sm" onClick={()=>go('conversation',{convo:c.id, from:'library', rec:c})}><Icon name="spark" size={14} />Insights</button>
-                    {c.url && <button className="btn btn-soft btn-sm btn-icon" title="Download audio" onClick={()=>download(c)}><Icon name="download" size={15} /></button>}
+                    {c.url && <button className="btn btn-soft btn-sm btn-icon" aria-label="Download audio" title="Download audio" onClick={()=>download(c)}><Icon name="download" size={15} /></button>}
                     {confirmId===c.id
                       ? <span className="row" style={{ gap:6 }}>
                           <button className="btn btn-sm" style={{ background:'var(--bad)', color:'#fff' }} onClick={()=>del(c)}>Delete</button>
                           <button className="btn btn-ghost btn-sm" onClick={()=>setConfirmId(null)}>Keep</button>
                         </span>
-                      : <button className="btn btn-soft btn-sm btn-icon" title="Delete recording" onClick={()=>setConfirmId(c.id)}><Icon name="trash" size={15} /></button>}
+                      : <button className="btn btn-soft btn-sm btn-icon" aria-label="Delete recording" title="Delete recording" onClick={()=>setConfirmId(c.id)}><Icon name="trash" size={15} /></button>}
                   </div>
                 </div>
                 {c.url

@@ -110,7 +110,7 @@ function Dashboard() {
         <div className="card center anim-up" style={{ padding:'70px 24px' }}>
           <div className="stack center" style={{ gap:16, maxWidth:460, textAlign:'center' }}>
             <span className="center" style={{ width:64, height:64, borderRadius:20, background:'var(--accent-soft)', color:'var(--accent-strong)' }}><Icon name="mic" size={30} /></span>
-            <h2 className="display" style={{ fontSize:26, margin:0 }}>Your dashboard is waiting for its first conversation</h2>
+            <h2 className="display" style={{ fontSize:26, margin:0 }}>Your dashboard is waiting for its first recording</h2>
             <p className="muted" style={{ margin:0, fontSize:14.5, lineHeight:1.6 }}>Record a voice note or upload a call. Kithra measures it on your device — pace, pauses, energy — then this page fills with your real numbers. No sample data here.</p>
             <div className="row center" style={{ gap:10, flexWrap:'wrap' }}>
               <button className="btn btn-primary btn-lg" onClick={()=>go('analyze')}><Icon name="mic" size={18} />Record or upload</button>
