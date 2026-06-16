@@ -46,6 +46,11 @@ const COUNTRIES = [
   { code:'TR', name:'Turkey', dial:'+90' }, { code:'EG', name:'Egypt', dial:'+20' },
 ];
 
+// Phone OTP needs a paid SMS provider (Twilio, Vonage, etc.) set in Supabase →
+// Auth → Providers → Phone. Hidden by default so users aren't offered a method
+// that can't send a code. Flip to true once an SMS provider is configured.
+const PHONE_ENABLED = false;
+
 function Auth({ gate }) {
   const { go, refreshUser, grantConsent, showToast, flow } = useApp();
   const Cloud = window.KithraCloud;
@@ -204,11 +209,13 @@ function Auth({ gate }) {
             <span className="hr grow" style={{ margin:0 }} />
           </div>
 
-          {/* Email / Phone method toggle */}
-          <div className="seg" style={{ width:'100%', marginBottom:16 }}>
-            <button className={method==='email'?'on':''} style={{ flex:1 }} onClick={()=>{ setMethod('email'); setErr(''); setNotice(''); }}><Icon name="file" size={14} /> Email</button>
-            <button className={method==='phone'?'on':''} style={{ flex:1 }} onClick={()=>{ setMethod('phone'); setErr(''); setNotice(''); }}><Icon name="phone" size={14} /> Phone</button>
-          </div>
+          {/* Email / Phone method toggle (phone shown only when an SMS provider is configured) */}
+          {PHONE_ENABLED && (
+            <div className="seg" style={{ width:'100%', marginBottom:16 }}>
+              <button className={method==='email'?'on':''} style={{ flex:1 }} onClick={()=>{ setMethod('email'); setErr(''); setNotice(''); }}><Icon name="file" size={14} /> Email</button>
+              <button className={method==='phone'?'on':''} style={{ flex:1 }} onClick={()=>{ setMethod('phone'); setErr(''); setNotice(''); }}><Icon name="phone" size={14} /> Phone</button>
+            </div>
+          )}
 
           {method === 'email' ? (
             <div className="stack" style={{ gap:12 }}>
