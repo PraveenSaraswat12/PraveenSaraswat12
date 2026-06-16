@@ -1,0 +1,22 @@
+name: Tests
+
+# Runs the Vitest suite (unit + component smoke tests) on every push/PR.
+on:
+  push:
+    branches: [main, claude/charming-faraday-9KqqX]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - run: npm test
