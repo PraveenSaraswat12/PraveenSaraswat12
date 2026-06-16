@@ -486,7 +486,7 @@ async function getTranscriber(onProgress) {
   const build = (async () => {
     const mod = await loadTransformers();
     if (mod.env) mod.env.allowLocalModels = false;
-    return await mod.pipeline('automatic-speech-recognition', 'Xenova/whisper-base', { progress_callback: onProgress });
+    return await mod.pipeline('automatic-speech-recognition', 'Xenova/whisper-small', { progress_callback: onProgress });
   })();
   _asr = build;
   try { return await build; } catch (e) { _asr = null; throw e; }
@@ -584,7 +584,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
       <span className="faint">Language</span>
       <select value={lang} onChange={(e) => setLang(e.target.value)}
         style={{ height: 34, padding: '0 8px', borderRadius: 'var(--r-ctrl)', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)', font: 'inherit' }}>
-        <option value="">Auto-detect</option>
+        <option value="">Auto-detect language</option>
         <option value="english">English</option>
         <option value="hindi">Hindi</option>
         <option value="spanish">Spanish</option>
@@ -635,8 +635,8 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
           )}
           <p className="faint" style={{ fontSize: 13, margin: 0, lineHeight: 1.55 }}>
             {cloudOn && useCloud
-              ? 'High accuracy with accents and names (Kithra AI). Opt-in: you’ll be asked for consent before any audio leaves this device. Add names/terms below so they’re spelled right.'
-              : 'On-device transcription — private, nothing leaves your device. The first run downloads a model (~145 MB).'}
+              ? 'Highest accuracy across languages, accents and names (Kithra AI, free). It auto-detects the spoken language and transcribes it as-is. Opt-in: you’ll be asked for consent before any audio leaves this device.'
+              : 'On-device transcription — private, nothing leaves your device. It auto-detects the spoken language and keeps it as-is (Hindi stays Hindi, etc.). The first run downloads a model (~240 MB).'}
           </p>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}</div>
           <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn && useCloud ? 'Transcribe with Kithra AI' : 'Transcribe on-device'}</button>
