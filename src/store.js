@@ -107,3 +107,8 @@ export async function pruneClips(owner, keep = 50) {
     for (const r of mine.slice(keep)) { try { await done(os.delete(r.id)); } catch (e) {} }
   } catch (e) {}
 }
+
+// expose for debugging + e2e (same API as the named exports above)
+if (typeof window !== 'undefined') {
+  window.KithraClipStore = { hasIDB, putClip, patchClip, deleteClip, getClips, pruneClips };
+}

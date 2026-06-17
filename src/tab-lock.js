@@ -105,3 +105,8 @@ export function subscribe(cb) {
 
 // exposed for tests (simulate other tabs by writing a different id)
 export const _internals = { TAB_ID, KEY, TTL, HEARTBEAT, readLock, writeLock, clearLock, alive };
+
+// expose for debugging + e2e (same API as the named exports above)
+if (typeof window !== 'undefined') {
+  window.KithraTabLock = { state, busyElsewhere, owned, claim, takeover, release, subscribe, _internals };
+}
