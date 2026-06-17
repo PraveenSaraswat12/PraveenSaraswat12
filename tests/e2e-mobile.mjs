@@ -94,7 +94,7 @@ async function main() {
   });
 
   // =========================================================
-  // [1] AUTH GATE (desktop) — no offline bypass; Google + Email/Phone
+  // [1] AUTH GATE (desktop) — no offline bypass; Google + Email
   // =========================================================
   console.log('\n[1] AUTH GATE — app routes require a real account');
   {
@@ -109,19 +109,16 @@ async function main() {
       shell: !!document.querySelector('.app') || !!document.querySelector('.side'),
       google: /Continue with Google/i.test(document.body.innerText),
       email: /Email/i.test(document.body.innerText),
-      phone: /Phone/i.test(document.body.innerText),
     }));
     check('logged-out app route shows #auth gate (no offline escape)', gate.google && !gate.shell, 'Auth shown, app shell absent');
-    check('auth gate offers Google + Email + Phone(OTP)', gate.google && gate.email && gate.phone, JSON.stringify(gate));
+    check('auth gate offers Google + Email', gate.google && gate.email, JSON.stringify(gate));
     const api = await pg.evaluate(() => ({
       google: typeof window.KithraCloud.signInWithGoogle === 'function',
-      sendOtp: typeof window.KithraCloud.sendPhoneOtp === 'function',
-      verifyOtp: typeof window.KithraCloud.verifyPhoneOtp === 'function',
       signUp: typeof window.KithraCloud.signUp === 'function',
       signIn: typeof window.KithraCloud.signIn === 'function',
       signOut: typeof window.KithraCloud.signOut === 'function',
     }));
-    check('auth client wiring present (google/otp/email/signOut)', Object.values(api).every(Boolean), JSON.stringify(api));
+    check('auth client wiring present (google/email/signOut)', Object.values(api).every(Boolean), JSON.stringify(api));
     await ctx.close();
   }
 

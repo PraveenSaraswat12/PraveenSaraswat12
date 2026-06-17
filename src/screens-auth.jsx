@@ -2,9 +2,8 @@ import React from 'react';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 /* ============================================================
    KITHRA — Auth: REAL sign in / sign up
-   Three real methods (all Supabase Auth):
+   Two real methods (both Supabase Auth):
      · Continue with Google  (OAuth redirect)
-     · Phone number + OTP    (SMS one-time code)
      · Email + password
    Rendered as a route (#auth) and as the in-app login gate.
    No offline / local-only escape — an account is required.
@@ -22,54 +21,17 @@ function GoogleG({ size = 18 }) {
   );
 }
 
-// country dial codes for the phone sign-in (India first; keyed by ISO code so duplicate dials are fine)
-const COUNTRIES = [
-  { code:'IN', name:'India', dial:'+91' }, { code:'US', name:'United States', dial:'+1' },
-  { code:'GB', name:'United Kingdom', dial:'+44' }, { code:'CA', name:'Canada', dial:'+1' },
-  { code:'AU', name:'Australia', dial:'+61' }, { code:'AE', name:'United Arab Emirates', dial:'+971' },
-  { code:'SA', name:'Saudi Arabia', dial:'+966' }, { code:'QA', name:'Qatar', dial:'+974' },
-  { code:'KW', name:'Kuwait', dial:'+965' }, { code:'BH', name:'Bahrain', dial:'+973' },
-  { code:'OM', name:'Oman', dial:'+968' }, { code:'SG', name:'Singapore', dial:'+65' },
-  { code:'MY', name:'Malaysia', dial:'+60' }, { code:'BD', name:'Bangladesh', dial:'+880' },
-  { code:'PK', name:'Pakistan', dial:'+92' }, { code:'LK', name:'Sri Lanka', dial:'+94' },
-  { code:'NP', name:'Nepal', dial:'+977' }, { code:'ID', name:'Indonesia', dial:'+62' },
-  { code:'PH', name:'Philippines', dial:'+63' }, { code:'TH', name:'Thailand', dial:'+66' },
-  { code:'VN', name:'Vietnam', dial:'+84' }, { code:'JP', name:'Japan', dial:'+81' },
-  { code:'KR', name:'South Korea', dial:'+82' }, { code:'CN', name:'China', dial:'+86' },
-  { code:'HK', name:'Hong Kong', dial:'+852' }, { code:'DE', name:'Germany', dial:'+49' },
-  { code:'FR', name:'France', dial:'+33' }, { code:'IT', name:'Italy', dial:'+39' },
-  { code:'ES', name:'Spain', dial:'+34' }, { code:'NL', name:'Netherlands', dial:'+31' },
-  { code:'IE', name:'Ireland', dial:'+353' }, { code:'NZ', name:'New Zealand', dial:'+64' },
-  { code:'ZA', name:'South Africa', dial:'+27' }, { code:'NG', name:'Nigeria', dial:'+234' },
-  { code:'KE', name:'Kenya', dial:'+254' }, { code:'BR', name:'Brazil', dial:'+55' },
-  { code:'MX', name:'Mexico', dial:'+52' }, { code:'RU', name:'Russia', dial:'+7' },
-  { code:'TR', name:'Turkey', dial:'+90' }, { code:'EG', name:'Egypt', dial:'+20' },
-];
-
-// Phone OTP needs a paid SMS provider (Twilio, Vonage, etc.) set in Supabase →
-// Auth → Providers → Phone. Hidden by default so users aren't offered a method
-// that can't send a code. Flip to true once an SMS provider is configured.
-const PHONE_ENABLED = false;
-
 function Auth({ gate }) {
   const { go, refreshUser, grantConsent, showToast, flow } = useApp();
   const Cloud = window.KithraCloud;
   const configured = !!(Cloud && Cloud.configured && Cloud.configured());
 
-  const [method, setMethod] = React.useState('email'); // 'email' | 'phone'
   const [kind, setKind] = React.useState((flow && flow.authMode) === 'login' ? 'in' : 'up');
 
   // email + password
   const [email, setEmail] = React.useState('');
   const [pw, setPw] = React.useState('');
   const [show, setShow] = React.useState(false);
-
-  // phone + otp
-  const [phone, setPhone] = React.useState('');
-  const [code, setCode] = React.useState('');
-  const [otpSent, setOtpSent] = React.useState(false);
-  const [country, setCountry] = React.useState('IN');
-  const dial = (COUNTRIES.find(c => c.code === country) || COUNTRIES[0]).dial;
 
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState('');
@@ -124,30 +86,6 @@ function Auth({ gate }) {
       setErr(/already registered/i.test(m) ? 'That email already has an account — sign in instead.' : m);
       if (/already registered/i.test(m)) setKind('in');
     }
-    setBusy(false);
-  };
-
-  // ---- phone OTP ----
-  const e164 = (p) => { const s = String(p).replace(/[^\d+]/g, ''); return s.startsWith('+') ? s : '+' + s; };
-  const sendOtp = async () => {
-    setErr(''); setNotice('');
-    const p = e164(dial + phone);
-    if (p.replace(/\D/g, '').length < 8) { setErr('Enter a valid phone number.'); return; }
-    if (!configured) { setErr('Cloud isn’t configured on this build.'); return; }
-    setBusy(true);
-    try { await Cloud.sendPhoneOtp(p); setOtpSent(true); setNotice('We texted a 6-digit code to ' + p + '.'); }
-    catch (e) { setErr((e && e.message) || String(e)); }
-    setBusy(false);
-  };
-  const verifyOtp = async () => {
-    setErr(''); setNotice('');
-    if ((code || '').replace(/\D/g, '').length < 4) { setErr('Enter the code from the text message.'); return; }
-    setBusy(true);
-    try {
-      await Cloud.verifyPhoneOtp(e164(dial + phone), code.trim());
-      const u = await arrive('Signed in');
-      if (!u) setErr('That code didn’t match — try again.');
-    } catch (e) { setErr((e && e.message) || String(e)); }
     setBusy(false);
   };
 
@@ -209,60 +147,25 @@ function Auth({ gate }) {
             <span className="hr grow" style={{ margin:0 }} />
           </div>
 
-          {/* Email / Phone method toggle (phone shown only when an SMS provider is configured) */}
-          {PHONE_ENABLED && (
-            <div className="seg" style={{ width:'100%', marginBottom:16 }}>
-              <button className={method==='email'?'on':''} style={{ flex:1 }} onClick={()=>{ setMethod('email'); setErr(''); setNotice(''); }}><Icon name="file" size={14} /> Email</button>
-              <button className={method==='phone'?'on':''} style={{ flex:1 }} onClick={()=>{ setMethod('phone'); setErr(''); setNotice(''); }}><Icon name="phone" size={14} /> Phone</button>
+          <div className="stack" style={{ gap:12 }}>
+            <div className="seg" style={{ width:'100%' }}>
+              <button className={kind==='up'?'on':''} style={{ flex:1 }} onClick={()=>{ setKind('up'); setErr(''); }}>Create account</button>
+              <button className={kind==='in'?'on':''} style={{ flex:1 }} onClick={()=>{ setKind('in'); setErr(''); }}>Sign in</button>
             </div>
-          )}
-
-          {method === 'email' ? (
-            <div className="stack" style={{ gap:12 }}>
-              <div className="seg" style={{ width:'100%' }}>
-                <button className={kind==='up'?'on':''} style={{ flex:1 }} onClick={()=>{ setKind('up'); setErr(''); }}>Create account</button>
-                <button className={kind==='in'?'on':''} style={{ flex:1 }} onClick={()=>{ setKind('in'); setErr(''); }}>Sign in</button>
-              </div>
-              <label className="stack" style={{ gap:5 }}><span className="eyebrow">Email</span>
-                <input className="field" style={{ height:44 }} type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" onKeyDown={onKey(submitEmail)} /></label>
-              <label className="stack" style={{ gap:5 }}><span className="eyebrow">Password</span>
-                <div className="row" style={{ gap:8 }}>
-                  <input className="field grow" style={{ height:44 }} type={show?'text':'password'} autoComplete={kind==='up'?'new-password':'current-password'} value={pw} onChange={e=>setPw(e.target.value)} placeholder={kind==='up'?'Choose a password (6+ characters)':'Your password'} onKeyDown={onKey(submitEmail)} />
-                  <button className="btn btn-soft btn-icon" style={{ height:44, width:44, flex:'none' }} onClick={()=>setShow(s=>!s)} aria-label={show?'Hide password':'Show password'}><Icon name="eye" size={17} /></button>
-                </div></label>
-              {kind==='in' && <button className="linkbtn" style={{ fontSize:12, alignSelf:'flex-end', marginTop:-2 }} disabled={busy} onClick={forgot}>Forgot password?</button>}
-              {err && <div className="row" style={{ gap:8, color:'var(--bad)', fontSize:13 }}><Icon name="x" size={14} />{err}</div>}
-              {notice && <div className="row" style={{ gap:8, color:'var(--good)', fontSize:13 }}><Icon name="check" size={14} />{notice}</div>}
-              <button className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={busy} onClick={submitEmail}>
-                {busy ? 'One moment…' : kind==='up' ? <><Icon name="user" size={17} />Create my account</> : <><Icon name="arrowR" size={17} />Sign in</>}
-              </button>
-            </div>
-          ) : (
-            <div className="stack" style={{ gap:12 }}>
-              <label className="stack" style={{ gap:5 }}><span className="eyebrow">Phone number</span>
-                <div className="row" style={{ gap:8 }}>
-                  <select value={country} onChange={e=>{ setCountry(e.target.value); setOtpSent(false); }} aria-label="Country code"
-                    style={{ height:44, padding:'0 8px', borderRadius:'var(--r-ctrl)', border:'1px solid var(--line)', background:'var(--surface)', color:'var(--ink)', font:'inherit', flex:'none', maxWidth:148 }}>
-                    {COUNTRIES.map(c=>(<option key={c.code} value={c.code}>{c.name} ({c.dial})</option>))}
-                  </select>
-                  <input className="field grow" style={{ height:44 }} type="tel" autoComplete="tel" inputMode="tel" value={phone} onChange={e=>{ setPhone(e.target.value); setOtpSent(false); }} placeholder="98765 43210" onKeyDown={onKey(otpSent?verifyOtp:sendOtp)} />
-                </div></label>
-              {otpSent && (
-                <label className="stack" style={{ gap:5 }}><span className="eyebrow">6-digit code</span>
-                  <input className="field" style={{ height:44, letterSpacing:'.3em', fontWeight:700 }} inputMode="numeric" maxLength={6} value={code} onChange={e=>setCode(e.target.value)} placeholder="••••••" onKeyDown={onKey(verifyOtp)} /></label>
-              )}
-              {err && <div className="row" style={{ gap:8, color:'var(--bad)', fontSize:13 }}><Icon name="x" size={14} />{err}</div>}
-              {notice && <div className="row" style={{ gap:8, color:'var(--good)', fontSize:13 }}><Icon name="check" size={14} />{notice}</div>}
-              {!otpSent ? (
-                <button className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={busy} onClick={sendOtp}>{busy?'Sending…':<><Icon name="arrowR" size={17} />Text me a code</>}</button>
-              ) : (
-                <div className="stack" style={{ gap:8 }}>
-                  <button className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={busy} onClick={verifyOtp}>{busy?'Verifying…':<><Icon name="check" size={17} />Verify & sign in</>}</button>
-                  <button className="linkbtn" style={{ fontSize:12.5, alignSelf:'center' }} disabled={busy} onClick={sendOtp}>Resend code</button>
-                </div>
-              )}
-            </div>
-          )}
+            <label className="stack" style={{ gap:5 }}><span className="eyebrow">Email</span>
+              <input className="field" style={{ height:44 }} type="email" autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" onKeyDown={onKey(submitEmail)} /></label>
+            <label className="stack" style={{ gap:5 }}><span className="eyebrow">Password</span>
+              <div className="row" style={{ gap:8 }}>
+                <input className="field grow" style={{ height:44 }} type={show?'text':'password'} autoComplete={kind==='up'?'new-password':'current-password'} value={pw} onChange={e=>setPw(e.target.value)} placeholder={kind==='up'?'Choose a password (6+ characters)':'Your password'} onKeyDown={onKey(submitEmail)} />
+                <button className="btn btn-soft btn-icon" style={{ height:44, width:44, flex:'none' }} onClick={()=>setShow(s=>!s)} aria-label={show?'Hide password':'Show password'}><Icon name="eye" size={17} /></button>
+              </div></label>
+            {kind==='in' && <button className="linkbtn" style={{ fontSize:12, alignSelf:'flex-end', marginTop:-2 }} disabled={busy} onClick={forgot}>Forgot password?</button>}
+            {err && <div className="row" style={{ gap:8, color:'var(--bad)', fontSize:13 }}><Icon name="x" size={14} />{err}</div>}
+            {notice && <div className="row" style={{ gap:8, color:'var(--good)', fontSize:13 }}><Icon name="check" size={14} />{notice}</div>}
+            <button className="btn btn-primary btn-lg" style={{ width:'100%' }} disabled={busy} onClick={submitEmail}>
+              {busy ? 'One moment…' : kind==='up' ? <><Icon name="user" size={17} />Create my account</> : <><Icon name="arrowR" size={17} />Sign in</>}
+            </button>
+          </div>
 
           <div className="hr" style={{ margin:'18px 0 12px' }} />
           <PrivacyChip text="Your account stores only what you choose to sync" />

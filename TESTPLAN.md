@@ -21,7 +21,7 @@
 
 The suite passes the login gate by stubbing `window.KithraCloud.getUser` and firing a `focus`
 event (the same session re-check the app uses when returning from the Google OAuth redirect),
-then drives the UI by route hash. Server-only paths (a real Razorpay charge, live Google/SMS
+then drives the UI by route hash. Server-only paths (a real Razorpay charge, live Google
 auth, the Gemini Edge Function) require backend secrets and are **not** exercised live — they are
 verified by reading the client/server contract and are marked **NEEDS-BACKEND** below.
 
@@ -31,8 +31,8 @@ verified by reading the client/server contract and are marked **NEEDS-BACKEND** 
 
 | # | Feature | Result | Evidence / repro |
 |---|---------|--------|------------------|
-| 1 | **Auth gate** — app routes require login; `#auth` shows Google + Email/Phone-OTP; sign-out → `KithraCloud.signOut` | **PASS** | `app.jsx:212` `needLogin = isApp && cloudConfigured && user===null`; built bundle bakes in `KITHRA_CONFIG` (real Supabase URL+key) so `configured()===true` → gate is **live**. Logged-out `#dashboard` renders `<Auth gate>`; app shell (`.app`/`.side`) is absent from the DOM. Sign-out in `app.jsx:380` calls `KithraCloud.signOut()`. Suite §1. |
-| 2 | **Auth method wiring** (`cloud.js`) | **PASS** (client) / **NEEDS-BACKEND** (live SMS + Google) | `signInWithGoogle`→`signInWithOAuth({provider:'google',…})` (`cloud.js:90`); `sendPhoneOtp`→`signInWithOtp({phone})` (`:102`); `verifyPhoneOtp`→`verifyOtp({phone,token,type:'sms'})` (`:106`); email `signUp`/`signIn`→`signUp`/`signInWithPassword` (`:82-83`). All client calls correct. Live Google + Twilio/SMS need Supabase provider config. Suite §2. |
+| 1 | **Auth gate** — app routes require login; `#auth` shows Google + Email; sign-out → `KithraCloud.signOut` | **PASS** | `app.jsx:212` `needLogin = isApp && cloudConfigured && user===null`; built bundle bakes in `KITHRA_CONFIG` (real Supabase URL+key) so `configured()===true` → gate is **live**. Logged-out `#dashboard` renders `<Auth gate>`; app shell (`.app`/`.side`) is absent from the DOM. Sign-out in `app.jsx:380` calls `KithraCloud.signOut()`. Suite §1. |
+| 2 | **Auth method wiring** (`cloud.js`) | **PASS** (client) / **NEEDS-BACKEND** (live Google) | `signInWithGoogle`→`signInWithOAuth({provider:'google',…})`; email `signUp`/`signIn`→`signUp`/`signInWithPassword`. All client calls correct. Live Google needs Supabase provider config. Suite §2. |
 | 3 | **Recording → transcription → insight** | **PASS** (with 1 fix applied) | Upload/record → `addClip()` (`screens-analyze.jsx:165`). Transcribe → `KithraCloud.transcribe(b64,{mimeType,language,context})` (`:424`) → on success `updateClip(clipId,{transcript})` (`:418`). Insight → `KithraAI.clipInsights(clip,mode)` (`screens-conversation.jsx:26`) → `updateClip(clip.id,{insights})` (`:27`). AI shapes match `cloud/functions/ai/index.ts` (`{prompt,system}` for text, `{audio,mimeType,language,context}` for transcription). **Bug found & fixed:** insights weren't persisted (see Fixes). Suite §9. |
 | 4 | **Ask Kithra** — grounded answers + consent gate | **PASS** | `askKithra()` (`ai.js:57`) builds context from real `clips`/`books`/`focus` (`buildContext` `:29`), persona forbids inventing data (`:50-54`). First send with no `cloud_ai` consent shows the consent card and blocks the AI call (`screens-ask.jsx:49`, `:171-179`); `allowAndSend` grants then sends. Toolbar shows live "N recordings · M transcribed · K books". Suite §7. |
 | 5 | **Patterns from real data; no mock data anywhere user-visible** | **PASS** | `screens-patterns.jsx` derives all series from `clips`/`analysis` (`:12-18`); AI read calls `askKithra` over real clips. **No mock data is displayed:** `window.LUMEN`/`data.js` still loads, but the `data` context value (`app.jsx:181/184`) is **never destructured by any screen**. `window.LUMEN` is only used for onboarding goal chips, a capture-mode AI fallback string, and `importQueue` init (not rendered). Dashboard/Conversation/Library/Patterns/Ask all read real `clips`/`books`. |
@@ -97,7 +97,7 @@ not touched.**
 ## Verdict — is this a real, shippable success?
 
 **Yes — this is a real, shippable success**, with the two fixes above applied (and assuming the standard
-backend setup: Supabase Auth providers for live Google/SMS, the Razorpay + Google-AI Edge Function secrets,
+backend setup: Supabase Auth providers for live Google, the Razorpay + Google-AI Edge Function secrets,
 and `cloud/schema.sql` run on the project).
 
 The product is genuinely wired end-to-end, not a mock: a real login gate (no offline escape in the shipped
@@ -110,5 +110,5 @@ real consent ledger + export + erasure. The 43-assertion Playwright suite passes
 **Pre-redeploy checklist for the orchestrator:**
 1. Re-bundle `src/` so Fixes 1 & 2 land in `dist-single` (the build agent's rebuild already picked up Fix 1 — confirmed by the passing gate test; confirm Fix 2 is bundled too).
 2. Run `cloud/schema.sql` on the Supabase project (adds the `insights` column).
-3. Confirm Supabase secrets are set: Google provider, Phone/SMS provider, `GOOGLE_AI_API_KEY`, `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`.
+3. Confirm Supabase secrets are set: Google provider, `GOOGLE_AI_API_KEY`, `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET`.
 4. Smoke-test one live Razorpay test-mode order and one Gemini call end-to-end (the only paths the UI suite can't charge).

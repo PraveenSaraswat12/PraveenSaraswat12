@@ -219,8 +219,8 @@ function AppProvider() {
   };
 
   const isApp = ROUTES[route]?.app;
-  // real login gate: app screens require a real account (Google, phone OTP, or
-  // email). No offline / local-only escape — an account is always required.
+  // real login gate: app screens require a real account (Google or email).
+  // No offline / local-only escape — an account is always required.
   const cloudConfigured = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
   const needLogin = isApp && cloudConfigured && user === null;
   const checking = isApp && cloudConfigured && user === undefined;

@@ -54,13 +54,12 @@ Deploy [`cloud/functions/payments/index.ts`](cloud/functions/payments/index.ts).
 
 ## Step 3 — Sign-in methods (Auth → Providers)
 
-The app offers three real ways to sign in. Each needs its provider switched on:
+The app offers two real ways to sign in. Each needs its provider switched on:
 
 | Method | What to do | Cost |
 |---|---|---|
 | **Email + password** | Already on by default. Nothing to do. | Free |
 | **Google** | Auth → Providers → **Google** → on. In Google Cloud Console create an OAuth client, set the **Authorized redirect URI** to `https://elaruyvaroadjlhsddxb.supabase.co/auth/v1/callback`, paste the Client ID + Secret into Supabase. Then Auth → URL Configuration → add your site URL (the GitHub Pages URL) to **Redirect URLs**. | Free |
-| **Phone + OTP** | Auth → Providers → **Phone** → on, then connect an SMS provider (e.g. **Twilio**). | Twilio is **paid** (~$0.01–0.08 per SMS). Until it's connected, the Phone tab will show Supabase's "SMS provider not configured" error — that's expected. |
 
 > The Google redirect returns into the app's URL; Supabase reads the session out
 > of it automatically and the login gate clears on focus. No code change needed.
@@ -85,7 +84,7 @@ Razorpay test card: `4111 1111 1111 1111`, any future expiry, any CVV.
 
 ## Step 5 — Smoke test (after Steps 1–4)
 
-1. **Sign in** three ways: email, Google, phone OTP (if Twilio is on).
+1. **Sign in** two ways: email or Google.
 2. **Record or upload** audio → it transcribes (Gemini) → you get an insight card.
 3. **Ask Kithra** a question about your recording → grounded, concise answer
    (no "thinking out loud", no wrong facts).
@@ -101,7 +100,6 @@ Razorpay test card: `4111 1111 1111 1111`, any future expiry, any CVV.
 |---|---|
 | Google Gemini (AI + transcription) | Generous **free tier**; paid only above it |
 | Supabase (DB/Auth/Functions) | Free tier is plenty to start |
-| Twilio SMS (phone OTP) | **Paid** per message — only if you enable Phone login |
 | Razorpay fees | ~**2–3%** per successful payment |
 
 Everything else (hosting on GitHub Pages, the app itself) is free.

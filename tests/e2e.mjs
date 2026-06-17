@@ -73,7 +73,7 @@ async function main() {
   await sleep(900);
 
   // ---------------------------------------------------------
-  console.log('\n[1] Auth gate — app routes require login, #auth offers Google + Email/Phone');
+  console.log('\n[1] Auth gate — app routes require login, #auth offers Google + Email');
   // ---------------------------------------------------------
   const configured = await pg.evaluate(() => !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured()));
   check('build ships with Supabase config (gate is live)', configured, 'KithraCloud.configured() === true');
@@ -93,7 +93,7 @@ async function main() {
     gateState.google && !gateState.shell,
     'dashboard route renders Auth, app shell (.app/.side) absent');
   check('auth gate offers Google sign-in', /Continue with Google/i.test(txt));
-  check('auth gate offers Email + Phone methods', /Email/i.test(txt) && /Phone/i.test(txt));
+  check('auth gate offers Email method', /Email/i.test(txt));
 
   // signOut path is wired to KithraCloud.signOut
   const signOutWired = await pg.evaluate(() => typeof window.KithraCloud.signOut === 'function');
@@ -104,13 +104,10 @@ async function main() {
   // ---------------------------------------------------------
   const authApi = await pg.evaluate(() => ({
     google: typeof window.KithraCloud.signInWithGoogle === 'function',
-    sendOtp: typeof window.KithraCloud.sendPhoneOtp === 'function',
-    verifyOtp: typeof window.KithraCloud.verifyPhoneOtp === 'function',
     signUp: typeof window.KithraCloud.signUp === 'function',
     signIn: typeof window.KithraCloud.signIn === 'function',
   }));
-  check('signInWithGoogle / sendPhoneOtp / verifyPhoneOtp present', authApi.google && authApi.sendOtp && authApi.verifyOtp,
-    JSON.stringify(authApi));
+  check('signInWithGoogle present', authApi.google, JSON.stringify(authApi));
   check('email signUp / signIn present', authApi.signUp && authApi.signIn);
 
   // ---------------------------------------------------------

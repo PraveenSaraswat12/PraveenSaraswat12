@@ -113,18 +113,6 @@ const Cloud = {
     if (error) throw error; return data;
   },
 
-  // ---- phone number + OTP (SMS) ----
-  // Sends a one-time code by SMS; verify exchanges it for a session.
-  // Requires an SMS provider (Twilio etc.) set in Supabase → Auth → Providers → Phone.
-  async sendPhoneOtp(phone) {
-    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
-    const { data, error } = await c.auth.signInWithOtp({ phone }); if (error) throw error; return data;
-  },
-  async verifyPhoneOtp(phone, token) {
-    const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
-    const { data, error } = await c.auth.verifyOtp({ phone, token, type: 'sms' }); if (error) throw error; return data;
-  },
-
   // book sync (called from the app whenever the library changes, if signed in)
   // notes are encrypted on-device before upload
   async syncBooks(books) {

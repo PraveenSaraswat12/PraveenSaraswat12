@@ -19,7 +19,7 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers \
 
 Login gate is bypassed in-test by stubbing `window.KithraCloud.getUser` then firing a
 `focus` event (mirrors the real return-from-OAuth re-check). Owner = `saraswatpraveen21@gmail.com`,
-Free = `free@test.com`. Server-only paths (live Razorpay charge, real Google/SMS auth, the
+Free = `free@test.com`. Server-only paths (live Razorpay charge, real Google auth, the
 Gemini Edge Function) require backend secrets and are **not charged**; only their client wiring
 is asserted (functions present) — marked `NEEDS-BACKEND` below.
 
@@ -30,8 +30,8 @@ is asserted (functions present) — marked `NEEDS-BACKEND` below.
 | # | Item | Desktop | Mobile | Repro / evidence |
 |---|------|:-------:|:------:|------------------|
 | 1 | **Auth gate** — logged-out app route shows `#auth`, no offline bypass | PASS | PASS (gate is viewport-independent) | `#dashboard` while signed out renders `Auth`, app shell `.app/.side` absent |
-| 1 | Auth offers Google + Email + Phone-OTP | PASS | PASS | "Continue with Google", Email & Phone method tabs all present |
-| 1 | Auth client wiring (`signInWithGoogle`/`sendPhoneOtp`/`verifyPhoneOtp`/`signUp`/`signIn`/`signOut`) | PASS | — | all are functions on `window.KithraCloud` (NEEDS-BACKEND to actually transact) |
+| 1 | Auth offers Google + Email | PASS | PASS | "Continue with Google" and Email sign-in present |
+| 1 | Auth client wiring (`signInWithGoogle`/`signUp`/`signIn`/`signOut`) | PASS | — | all are functions on `window.KithraCloud` (NEEDS-BACKEND to actually transact) |
 | 2 | **Every route renders w/o pageerror** (dashboard, ask, patterns, library, books, analyze, sources, privacy, pricing) | PASS (9/9) | PASS (9/9) | `page.on('console')`+`pageerror` captured per route; zero errors on any route, either viewport |
 | 2 | **Zero horizontal overflow** at 390 (scrollWidth==clientWidth) | n/a | PASS (9/9, overflow=0px) | sw=390, cw=390 on every route |
 | 3 | **Mobile: desktop sidebar/topbar NOT visible** at 390 | n/a | PASS | `.side` & `.topbar` computed `display:none` via `.app.is-mobile` |
@@ -117,5 +117,5 @@ mobile (390×844): the auth gate holds, every route renders error-free with zero
 on phone, the native mobile shell (5-tab bar + More sheet + header + toggles + sign-out) works, the
 desktop chrome is untouched, owner all-access and Free-tier gating both behave correctly, and pricing
 math + checkout/auth/AI client wiring are in place. The only untested surfaces are server-side
-(live payment charge, real OAuth/SMS, the Gemini Edge Function), which need backend secrets and are
+(live payment charge, real OAuth, the Gemini Edge Function), which need backend secrets and are
 flagged `NEEDS-BACKEND` — these are out of scope for UI E2E and unchanged by the mobile work.
