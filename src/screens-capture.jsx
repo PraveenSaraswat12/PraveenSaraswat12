@@ -1,5 +1,6 @@
 import React from 'react';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import * as Lock from './tab-lock.js';
 /* ============================================================
    LUMEN — Live Capture host (app-level, persists across screens)
    Listen + Conversation modes, minimize-to-background with a
@@ -36,6 +37,7 @@ function LiveCaptureHost() {
   const [err, setErr] = React.useState('');
   const [askBg, setAskBg] = React.useState(false);
   const [nativeCap, setNativeCap] = React.useState(false);
+  const [lockedElsewhere, setLockedElsewhere] = React.useState(false);
   const recRef = React.useRef(null);
   const wantRef = React.useRef(false);
   const busyRef = React.useRef(false);
@@ -47,6 +49,30 @@ function LiveCaptureHost() {
   React.useEffect(() => { if (!running) return; const id=setInterval(()=>setSecs(s=>s+1),1000); return ()=>clearInterval(id); }, [running]);
   // native (Android) device-audio capture available? → reveal the option
   React.useEffect(() => { let on=true; (async()=>{ try{ const ok=await window.KithraSystemAudio?.isSupported?.(); if(on) setNativeCap(!!ok); }catch(e){} })(); return ()=>{ on=false; }; }, []);
+  // ---- single-tab guard: only one tab may hold live capture at a time ----
+  const yieldCapture = React.useCallback((msg) => {
+    wantRef.current = false; busyRef.current = false;
+    try { recRef.current && recRef.current.stop(); } catch (e) {}
+    V.stopSpeak && V.stopSpeak();
+    setRunning(false); if (msg) setErr(msg);
+  }, []);
+  React.useEffect(() => {
+    setLockedElsewhere(Lock.busyElsewhere());
+    return Lock.subscribe((st) => {
+      setLockedElsewhere(st === 'theirs');
+      // another tab took the mic while we were live → step aside cleanly
+      if (st === 'theirs' && wantRef.current) yieldCapture('Live capture moved to another tab.');
+    });
+  }, [yieldCapture]);
+  // free the lock (and warn) if the tab is closed mid-capture, so a stuck lock
+  // never blocks the next tab and an accidental close doesn't lose the session
+  React.useEffect(() => {
+    const onUnload = (e) => { if (wantRef.current) { Lock.release(); e.preventDefault(); e.returnValue = ''; } };
+    const onHide = () => { if (wantRef.current) Lock.release(); };
+    window.addEventListener('beforeunload', onUnload);
+    window.addEventListener('pagehide', onHide);
+    return () => { window.removeEventListener('beforeunload', onUnload); window.removeEventListener('pagehide', onHide); Lock.release(); };
+  }, []);
 
   const fmt = (s)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const words = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
@@ -100,14 +126,21 @@ function LiveCaptureHost() {
     recRef.current=r; try{r.start();}catch(e){} return true;
   };
 
-  const start = () => {
+  const beginCapture = () => {
     setErr('');
-    if (!V.sttSupported) { setErr('Live capture needs Chrome or Edge with microphone access. The native app handles this in the background.'); return; }
     V.stopSpeak && V.stopSpeak();
     wantRef.current = true; busyRef.current = false;
     if (capMode==='listen') startListen(); else startTurn();
   };
-  const stop = () => { wantRef.current=false; busyRef.current=false; try{recRef.current&&recRef.current.stop();}catch(e){} V.stopSpeak&&V.stopSpeak(); setRunning(false); };
+  const start = () => {
+    setErr('');
+    if (!V.sttSupported) { setErr('Live capture needs Chrome or Edge with microphone access. The native app handles this in the background.'); return; }
+    if (!Lock.claim({ mode: capMode })) { setLockedElsewhere(true); return; } // another tab already owns live capture
+    setLockedElsewhere(false);
+    beginCapture();
+  };
+  const takeOverHere = () => { Lock.takeover({ mode: capMode }); setLockedElsewhere(false); beginCapture(); };
+  const stop = () => { wantRef.current=false; busyRef.current=false; try{recRef.current&&recRef.current.stop();}catch(e){} V.stopSpeak&&V.stopSpeak(); setRunning(false); Lock.release(); };
   const switchMode = (m) => { if (m===capMode) return; stop(); setCapMode(m); setSecs(0); };
   const fullClose = () => { stop(); setSecs(0); setTranscript(''); setExchanges([]); setInterim(''); closeCapture(); };
   const goBackground = () => { setAskBg(false); minimizeCapture(); };
@@ -211,10 +244,19 @@ function LiveCaptureHost() {
           )
         )}
 
+        {lockedElsewhere && !running && (
+          <div className="lc-elsewhere" role="status" style={{ display:'flex', alignItems:'center', gap:10, marginTop:14, padding:'11px 13px', borderRadius:12, background:'var(--accent-soft)', color:'var(--accent-strong)', fontSize:13, lineHeight:1.45 }}>
+            <Icon name="mic" size={16} />
+            <span className="grow">Live capture is running in <b>another tab</b>. Only one tab listens at a time, so your audio is never split or duplicated.</span>
+          </div>
+        )}
+
         <div className="row" style={{ gap:10, marginTop:16 }}>
-          {!running
-            ? <button className="btn btn-primary btn-lg grow" onClick={start}><Icon name={capMode==='converse'?'chat':'mic'} size={18} />{capMode==='converse'?'Start talking':'Start listening'}</button>
-            : <button className="btn btn-lg grow" style={{ background:'var(--bad)', color:'#fff' }} onClick={stop}><Icon name="pause" size={18} />Stop</button>}
+          {running
+            ? <button className="btn btn-lg grow" style={{ background:'var(--bad)', color:'#fff' }} onClick={stop}><Icon name="pause" size={18} />Stop</button>
+            : lockedElsewhere
+              ? <button className="btn btn-primary btn-lg grow" onClick={takeOverHere}><Icon name="refresh" size={18} />Take over capture here</button>
+              : <button className="btn btn-primary btn-lg grow" onClick={start}><Icon name={capMode==='converse'?'chat':'mic'} size={18} />{capMode==='converse'?'Start talking':'Start listening'}</button>}
           {running
             ? <button className="btn btn-soft btn-lg" onClick={()=>setAskBg(true)} title="Keep running in background"><Icon name="chevD" size={17} />Background</button>
             : <button className="btn btn-soft btn-lg" disabled={!transcript && exchanges.length===0} onClick={()=>{ stop(); closeCapture(); go('analyze'); }} title="Analyze captured audio"><Icon name="trend" size={17} />Analyze</button>}
