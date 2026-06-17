@@ -4,6 +4,7 @@ import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Bad
 import { LiveCaptureHost } from './screens-capture.jsx';
 import { Toast, PermissionGate } from './screens-system.jsx';
 import { MobileHeader, MobileTabBar, useIsMobile } from './mobile-nav.jsx';
+import * as ClipStore from './store.js';
 /* ============================================================
    LUMEN — app shell, router, provider, tweaks
    ============================================================ */
@@ -83,18 +84,34 @@ function AppProvider() {
     setPerms(p); try { localStorage.setItem('kithra_perms', JSON.stringify(p)); } catch(e){}
   }, []);
 
-  // ----- user's real recordings/uploads (session) — shared across Analyze + Recordings -----
+  // ----- user's real recordings/uploads — durable across reload/logout/login -----
+  // Stored local-first in IndexedDB (audio + metadata) so nothing is lost when the
+  // tab reloads or the user signs out and back in; cloud sync mirrors it for
+  // cross-device. `ownerRef` tags each recording to the signed-in account.
+  const ownerRef = React.useRef('local');
   const [clips, setClips] = React.useState([]);
   const [viewClip, setViewClip] = React.useState(null); // clip whose insights to open on Analyze
-  const addClip = React.useCallback((clip) => {
-    setClips(cs => [clip, ...cs].slice(0, 50));
+  const addClip = React.useCallback((clip, blob) => {
+    setClips(cs => [clip, ...cs.filter(c => c.id !== clip.id)].slice(0, 50));
+    const owner = ownerRef.current;
+    (async () => {
+      let b = blob;
+      // recover the blob from the object URL if a caller didn't hand us one
+      if (!b && clip && clip.url) { try { b = await fetch(clip.url).then(r => r.blob()); } catch (e) {} }
+      try { await ClipStore.putClip(clip, b, owner); await ClipStore.pruneClips(owner); } catch (e) {}
+    })();
     try { if (window.KithraCloud && window.KithraCloud.configured()) window.KithraCloud.saveRecording(clip); } catch (e) {}
   }, []);
-  const removeClip = React.useCallback((id) => setClips(cs => {
-    const gone = cs.find(c => c.id === id);
-    if (gone && gone.url) { try { URL.revokeObjectURL(gone.url); } catch(e){} }
-    return cs.filter(c => c.id !== id);
-  }), []);
+  const removeClip = React.useCallback((id) => {
+    setClips(cs => {
+      const gone = cs.find(c => c.id === id);
+      if (gone && gone.url) { try { URL.revokeObjectURL(gone.url); } catch(e){} }
+      return cs.filter(c => c.id !== id);
+    });
+    try { ClipStore.deleteClip(id); } catch (e) {}
+    // also remove from the cloud, so a deleted recording doesn't reappear on re-login
+    try { window.KithraCloud && window.KithraCloud.configured() && window.KithraCloud.deleteRecording && window.KithraCloud.deleteRecording(id); } catch (e) {}
+  }, []);
 
   // ----- books library (knowledge base that grounds insights) — persisted on-device -----
   const BOOK_SEED = [
@@ -152,18 +169,33 @@ function AppProvider() {
     window.addEventListener('focus', h);
     return () => { document.removeEventListener('visibilitychange', h); window.removeEventListener('focus', h); };
   }, [refreshUser]);
-  // when signed in, pull saved recordings (metadata+transcripts) into the session
+  // stable account id: changes only when the identity actually changes (not on
+  // every tab-focus session re-check), so we don't re-hydrate / leak audio URLs.
+  const uid = user === undefined ? undefined : (user ? user.id : null);
+  React.useEffect(() => { ownerRef.current = uid || 'local'; }, [uid]);
+  // hydrate recordings: local-first (IndexedDB, with playable audio), then merge
+  // any cloud-only rows. On sign-out, drop the in-memory list and free audio URLs
+  // but KEEP on-device storage, so signing back in restores everything.
   React.useEffect(() => {
     let on = true;
+    if (uid === undefined) return;            // still checking the session
+    if (uid === null) {                       // signed out: clear memory, keep IDB
+      setClips(cs => { cs.forEach(c => { if (c.url) { try { URL.revokeObjectURL(c.url); } catch (e) {} } }); return []; });
+      return;
+    }
     (async () => {
-      if (!user) return;
+      let local = [];
+      try { local = await ClipStore.getClips(uid); } catch (e) {}
+      if (!on) return;
+      if (local.length) setClips(local);
+      try { local.forEach(c => ClipStore.patchClip(c.id, { owner: uid })); } catch (e) {} // adopt unclaimed clips
       try {
         const rows = await (window.KithraCloud && window.KithraCloud.fetchRecordings && window.KithraCloud.fetchRecordings());
         if (on && Array.isArray(rows)) setClips(cs => { const have = new Set(cs.map(c => c.id)); return [...cs, ...rows.filter(r => !have.has(r.id))]; });
       } catch (e) {}
     })();
     return () => { on = false; };
-  }, [user]);
+  }, [uid]);
   const updateClip = React.useCallback((id, patch) => {
     setClips(cs => cs.map(c => {
       if (c.id !== id) return c;
@@ -171,6 +203,7 @@ function AppProvider() {
       try { if (window.KithraCloud && window.KithraCloud.configured()) window.KithraCloud.saveRecording(next); } catch (e) {}
       return next;
     }));
+    try { ClipStore.patchClip(id, patch); } catch (e) {} // persist transcript/insights on-device
   }, []);
 
   // ----- "ask about this recording" focus -----

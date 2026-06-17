@@ -165,7 +165,7 @@ function Analyze() {
         const source = /^Live recording/.test(file.name) ? 'listen' : 'upload';
         const id = 'clip-' + Date.now();
         setClipId(id);
-        addClip({ id, name: r.name, url, durSec: r.duration, peaks: r.peaks, source, analysis: r, ts: Date.now() });
+        addClip({ id, name: r.name, url, durSec: r.duration, peaks: r.peaks, source, analysis: r, ts: Date.now() }, file);
       } catch (e) {}
       // natural-language summary via Kithra's AI (Groq) when the cloud is connected
       if (window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured()) {
