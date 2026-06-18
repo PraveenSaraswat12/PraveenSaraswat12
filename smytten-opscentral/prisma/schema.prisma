@@ -29,6 +29,9 @@ model User {
   createdAt    DateTime      @default(now())
   uploads      UploadBatch[]
 
+  gmailConnections    GmailConnection[]
+  reviewedExtractions EmailExtraction[] @relation("reviewer")
+
   @@map("users")
 }
 
@@ -100,4 +103,68 @@ model DeliveryRecord {
   @@index([pickupDate])
   @@index([deliveryDate])
   @@map("delivery_records")
+}
+
+// ── Email intelligence (Phase 1 item 6) ────────────────────────────────
+
+// Stored Gmail OAuth credentials for the connected account.
+model GmailConnection {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email        String
+  refreshToken String
+  accessToken  String?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("gmail_connections")
+}
+
+enum EmailCategory {
+  CHARGEBACK
+  COURIER_ESCALATION
+  INWARD
+  OTHER
+}
+
+enum ExtractionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum RecordSource {
+  EMAIL
+  MANUAL
+}
+
+// One structured record extracted from a matched email, awaiting review.
+model EmailExtraction {
+  id             String           @id @default(cuid())
+  category       EmailCategory
+  status         ExtractionStatus @default(PENDING)
+  source         RecordSource     @default(EMAIL)
+  threadId       String
+  messageId      String?
+  emailDate      DateTime?
+  subject        String?
+  fromAddress    String?
+  gmailThreadUrl String?
+  // LLM-extracted fields (shape varies per category — see rules.extractFields)
+  data           Json
+  model          String?
+  confidence     Float?
+  rawSnippet     String?
+  createdAt      DateTime         @default(now())
+  reviewedAt     DateTime?
+  reviewedById   String?
+  reviewedBy     User?            @relation("reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([threadId, category])
+  @@index([status])
+  @@index([category])
+  @@map("email_extractions")
 }

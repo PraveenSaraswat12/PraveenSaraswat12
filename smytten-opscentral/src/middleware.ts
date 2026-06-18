@@ -32,10 +32,11 @@ export default withAuth(
   }
 );
 
-// Protect everything except the login page, NextAuth endpoints, and static
-// assets. API routes do their own session checks (see lib/session.ts).
+// Protect page routes only. All /api/* routes do their own auth (session for
+// UI calls, Bearer CRON_SECRET for the cron scan), so they must NOT be gated
+// here — otherwise the cron path would be redirected to /login.
 export const config = {
   matcher: [
-    "/((?!api/auth|login|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)",
+    "/((?!api|login|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|ico|webp)$).*)",
   ],
 };
