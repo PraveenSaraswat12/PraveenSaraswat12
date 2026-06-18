@@ -1,7 +1,8 @@
 name: Deploy Kithra to GitHub Pages
 
 # Builds the Vite app and publishes it to GitHub Pages.
-# One-time setup: repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+# Pages is enabled automatically by configure-pages (enablement: true), so no
+# manual Settings → Pages step is required for the first deploy.
 on:
   push:
     branches: [main]
@@ -29,6 +30,8 @@ jobs:
       - run: npm install
       - run: npm run build
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
