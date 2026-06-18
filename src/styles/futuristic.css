@@ -1,0 +1,339 @@
+/* ============================================================
+   KITHRA — Futuristic / 3D layer  (imported LAST, overrides via cascade)
+   Goal: a premium "conversation-intelligence console" — depth, glass,
+   ambient aurora, neon accents, 3D lift — without hurting readability.
+   Works in both dark (hero look) and light (frosted) themes.
+   Respects prefers-reduced-motion (all motion freezes).
+   ============================================================ */
+
+/* ---- ambient palette tokens (per theme) ---- */
+[data-theme="dark"]{
+  --fx-a:color-mix(in srgb,var(--accent) 46%, transparent);
+  --fx-b:color-mix(in srgb,var(--viz-5) 40%, transparent);
+  --fx-c:color-mix(in srgb,var(--viz-2) 26%, transparent);
+  --fx-aurora:.55;
+  --fx-glass:color-mix(in srgb,var(--surface) 78%, transparent);
+  --fx-edge:rgba(255,255,255,.10);
+}
+[data-theme="light"]{
+  --fx-a:color-mix(in srgb,var(--accent) 16%, transparent);
+  --fx-b:color-mix(in srgb,var(--viz-5) 13%, transparent);
+  --fx-c:color-mix(in srgb,var(--viz-2) 11%, transparent);
+  --fx-aurora:.42;
+  --fx-glass:color-mix(in srgb,#ffffff 72%, transparent);
+  --fx-edge:rgba(255,255,255,.7);
+}
+
+/* ---- ambient aurora backdrop (drifts slowly behind everything) ---- */
+#lumen-root{position:relative;isolation:isolate}
+#lumen-root::before{
+  content:'';position:fixed;inset:-25%;z-index:-1;pointer-events:none;
+  background:
+    radial-gradient(38% 44% at 18% 22%, var(--fx-a), transparent 70%),
+    radial-gradient(42% 42% at 82% 14%, var(--fx-b), transparent 70%),
+    radial-gradient(48% 52% at 72% 86%, var(--fx-c), transparent 72%);
+  filter:blur(46px) saturate(125%);
+  opacity:var(--fx-aurora);
+  animation:fxDrift 32s var(--ease) infinite alternate;
+  will-change:transform;
+}
+@keyframes fxDrift{
+  0%  {transform:translate3d(-2%,-1%,0) scale(1.02) rotate(0deg)}
+  50% {transform:translate3d(2%,2%,0)   scale(1.08) rotate(2deg)}
+  100%{transform:translate3d(-1%,3%,0)  scale(1.04) rotate(-2deg)}
+}
+/* let the aurora show through the app frame in both themes */
+.app,.lp,.ob,.proc-wrap{background:transparent}
+
+/* ---- glass surfaces (sidebar / topbar / dropdowns) ---- */
+.side{
+  background:var(--fx-glass);
+  -webkit-backdrop-filter:blur(16px) saturate(150%);backdrop-filter:blur(16px) saturate(150%);
+  box-shadow:1px 0 0 var(--fx-edge) inset;
+}
+.dd-menu{
+  background:var(--fx-glass);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:0 1px 0 var(--fx-edge) inset, var(--shadow-3);
+}
+.topbar{box-shadow:0 1px 0 var(--fx-edge) inset}
+
+/* ---- cards: floating glass planes with a light top edge ---- */
+.card{position:relative}
+.card::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:0 1px 0 var(--fx-edge) inset;
+}
+[data-theme="light"] .card{
+  box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 6px 18px rgba(28,30,64,.06), 0 2px 6px rgba(28,30,64,.05);
+}
+
+/* ---- 3D lift on interactive cards / rows ---- */
+.card-hover,.price-card,.winrow,.lrow{
+  transition:transform .22s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease);
+}
+.card-hover:hover,.price-card:hover{transform:translateY(-4px) scale(1.006)}
+[data-theme="light"] .card-hover:hover,[data-theme="light"] .price-card:hover{
+  box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 18px 40px rgba(28,30,64,.14), 0 0 0 1px color-mix(in srgb,var(--accent) 16%, transparent);
+}
+[data-theme="dark"] .card-hover:hover,[data-theme="dark"] .price-card:hover{
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset, 0 22px 50px rgba(0,0,0,.55), 0 0 26px color-mix(in srgb,var(--accent) 18%, transparent);
+}
+
+/* recommended plan floats + breathes a neon frame */
+.price-card.pop{
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--pc,var(--accent)) 40%, transparent), 0 18px 50px color-mix(in srgb,var(--pc,var(--accent)) 22%, transparent);
+  animation:fxFloat 7s var(--ease) infinite;
+}
+@keyframes fxFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+/* ---- luminous primary buttons with a sweeping sheen ---- */
+.btn-primary{position:relative;overflow:hidden}
+.btn-primary::before{
+  content:'';position:absolute;top:0;left:-60%;width:45%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.45),transparent);
+  transform:skewX(-18deg);transition:left .55s var(--ease);
+}
+.btn-primary:hover::before{left:130%}
+[data-theme="light"] .btn-primary{
+  box-shadow:0 2px 10px color-mix(in srgb,var(--accent) 38%, transparent), 0 1px 0 rgba(255,255,255,.35) inset;
+}
+
+/* ---- gradient brandmark + display headings (subtle, stays legible) ---- */
+.wordmark,.brand-tag{
+  background:linear-gradient(96deg, var(--ink), color-mix(in srgb,var(--accent) 78%, var(--ink)) 55%, color-mix(in srgb,var(--viz-2) 70%, var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+}
+.display{
+  background:linear-gradient(98deg, var(--ink) 30%, color-mix(in srgb,var(--accent) 42%, var(--ink)) 78%, color-mix(in srgb,var(--viz-5) 46%, var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+}
+/* keep the big numbers crisp but give them a faint accent glow */
+.metric-num{text-shadow:0 0 22px color-mix(in srgb,var(--accent) 16%, transparent)}
+
+/* brandmark glow */
+.side-brand svg{filter:drop-shadow(0 0 10px color-mix(in srgb,var(--accent) 38%, transparent))}
+
+/* ---- refined focus glow ---- */
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 22%, transparent)}
+.field:focus,.field:focus-visible{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%, transparent)}
+
+/* ---- futuristic thin scrollbars ---- */
+.scroll,.app-scroll{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 40%, transparent) transparent}
+.scroll::-webkit-scrollbar,.app-scroll::-webkit-scrollbar{width:10px;height:10px}
+.scroll::-webkit-scrollbar-thumb,.app-scroll::-webkit-scrollbar-thumb{
+  background:color-mix(in srgb,var(--accent) 36%, transparent);border-radius:999px;border:3px solid transparent;background-clip:content-box;
+}
+.scroll::-webkit-scrollbar-thumb:hover,.app-scroll::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--accent) 60%, transparent);background-clip:content-box}
+
+/* ---- search box gets a quiet glow on hover ---- */
+.searchbox:hover{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 12%, transparent)}
+
+/* ============================================================
+   Respect reduced-motion: freeze all ambient + hover motion
+   ============================================================ */
+@media (prefers-reduced-motion: reduce){
+  #lumen-root::before{animation:none !important}
+  .price-card.pop{animation:none !important}
+  .btn-primary::before{transition:none !important}
+  .card-hover,.price-card,.winrow,.lrow{transition:box-shadow .2s, border-color .2s}
+  .card-hover:hover,.price-card:hover{transform:none}
+  /* belt & braces: kill any remaining ambient/looping motion the global
+     reduce rule in styles.css speeds up but doesn't fully stop */
+  .mic-btn.live,.talk-orb-glow,.lc-notif-dot[data-on="1"],.listen-pulse::after,
+  .dots span,.speak-eq i,.bar > i{animation:none !important}
+}
+
+/* ============================================================
+   READABILITY / CONTRAST — keep gradient brand + headings legible
+   ============================================================ */
+/* In LIGHT theme the wordmark/display gradients lean on --ink (dark) so they
+   stay readable; cap how light the accent end can get so the last glyphs of a
+   gradient heading never wash out on the pale paper. */
+[data-theme="light"] .wordmark,[data-theme="light"] .brand-tag{
+  background:linear-gradient(96deg, var(--ink), color-mix(in srgb,var(--accent) 58%, var(--ink)) 60%, color-mix(in srgb,var(--viz-1) 52%, var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+}
+[data-theme="light"] .display{
+  background:linear-gradient(98deg, var(--ink) 34%, color-mix(in srgb,var(--accent) 36%, var(--ink)) 80%, color-mix(in srgb,var(--viz-1) 40%, var(--ink)));
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+}
+/* the italic brand tagline is tiny — nudge it off the faintest ink for AA-ish
+   legibility on glass without losing the "whisper" hierarchy */
+.side-brand .brand-tag{color:var(--ink-2);opacity:.9}
+/* gradient text can clip its own descenders when background-clip:text; give a
+   hair of breathing room so 'g','y','p' aren't shaved */
+.display,.wordmark{padding-bottom:.04em}
+
+/* ============================================================
+   FOCUS — visible rings that read on glass + aurora (both themes)
+   ============================================================ */
+/* default ring already set globally; ensure it sits ABOVE neighbouring glass
+   and isn't clipped by overflow:hidden parents */
+:focus-visible{position:relative;z-index:1}
+/* nav items / dropdown items / mode + plan controls: glass-friendly ring */
+.nav-item:focus-visible,.dd-item:focus-visible,.cc-item:focus-visible,
+.modeswitch button:focus-visible,.seg button:focus-visible,.auth-tabs button:focus-visible{
+  outline:2px solid var(--accent);outline-offset:-2px;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 26%, transparent);border-radius:var(--r-ctrl);
+}
+/* avatar / icon-only round buttons keep a circular ring */
+.dd > button:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:50%}
+/* keyboard users on the searchbox (it's a div) get a clear ring */
+.searchbox:focus-visible{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 18%, transparent)}
+
+/* ============================================================
+   DROPDOWNS / MODALS / TOASTS over the aurora — stay readable
+   (raise opacity of the frosted glass so text never muddies on the
+    drifting backdrop; keep the premium blur)
+   ============================================================ */
+.dd-menu,.cc-menu{
+  background:color-mix(in srgb,var(--surface) 96%, transparent);
+  -webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);
+}
+[data-theme="dark"] .dd-menu,[data-theme="dark"] .cc-menu{
+  background:color-mix(in srgb,var(--surface) 88%, #05060d 12%);
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset, var(--shadow-3);
+}
+.kt-toast,.lc-pill,.lib-player,.lib-selbar{
+  background:color-mix(in srgb,var(--surface) 90%, transparent);
+}
+[data-theme="dark"] .kt-toast,[data-theme="dark"] .lc-pill,
+[data-theme="dark"] .lib-player,[data-theme="dark"] .lib-selbar{
+  background:color-mix(in srgb,var(--surface) 84%, #05060d 16%);
+}
+
+/* ============================================================
+   GLOBAL SCROLLBARS — style the app-shell + every overflow region
+   (styles.css only scopes .scroll/.app-scroll; cover dropdowns,
+    library lists, transcripts, modals so none show a raw OS bar)
+   ============================================================ */
+.dd-menu,.cc-list,.lc-transcript,.lc-feed,.lc-card,.kt-perm,.lib-player,
+.ask-msgs,.cv-layout,textarea.field{
+  scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--accent) 34%, transparent) transparent;
+}
+.dd-menu::-webkit-scrollbar,.cc-list::-webkit-scrollbar,.lc-transcript::-webkit-scrollbar,
+.lc-feed::-webkit-scrollbar,.lc-card::-webkit-scrollbar,.kt-perm::-webkit-scrollbar{width:8px;height:8px}
+.dd-menu::-webkit-scrollbar-thumb,.cc-list::-webkit-scrollbar-thumb,.lc-transcript::-webkit-scrollbar-thumb,
+.lc-feed::-webkit-scrollbar-thumb,.lc-card::-webkit-scrollbar-thumb,.kt-perm::-webkit-scrollbar-thumb{
+  background:color-mix(in srgb,var(--accent) 30%, transparent);border-radius:999px;border:2px solid transparent;background-clip:content-box;
+}
+
+/* ============================================================
+   POLISH — no clipped shadows; let lifted/glowing cards breathe
+   (overflow:hidden on app-main clips the -4px hover lift glow; the
+    page already has horizontal padding, just make sure rows/cards
+    that lift have room and shadows aren't cut at the viewport edge)
+   ============================================================ */
+.card-hover,.price-card{will-change:transform}
+/* tabular data stays crisp — never inherit the heading gradient/glow */
+.tnum,.metric .val .n,.lrow .ttl,td,th{-webkit-text-fill-color:currentColor}
+
+/* ============================================================
+   TOUCH TARGETS — ≥44px on coarse pointers (phones / Android APK)
+   without bloating the dense desktop UI
+   ============================================================ */
+@media (pointer:coarse){
+  .btn-icon{width:44px;height:44px}
+  .btn-sm{height:38px}
+  .plan-pill,.vchip,.chip{min-height:40px}
+  .modeswitch button{height:40px}
+  .modeswitch{padding:4px}
+  .nav-item{height:46px}
+  .dd-item,.cc-item{min-height:44px}
+  .lib-play{width:42px;height:42px}
+  .toggle{width:50px;height:30px}
+  .toggle i{width:24px;height:24px}
+  .toggle.on i{transform:translateX(20px)}
+  /* the account avatar button — enlarge its hit area without resizing the art */
+  .dd > button{padding:4px;margin:-4px}
+}
+
+/* ============================================================
+   RESPONSIVE — the big one. Make the console usable on phones.
+   The app shell is `grid:auto 1fr` with a permanent 248px sidebar and
+   an `overflow:hidden` main column, so on a phone the content gets
+   clipped. With no JS drawer available we collapse the sidebar to a
+   slim ICON RAIL (nav stays reachable, content gets the width back)
+   and slim down / declutter the topbar so nothing overflows.
+   ============================================================ */
+
+/* ---- ≤980px: tighten the shell, search box shrinks first ---- */
+@media (max-width:980px){
+  .topbar{gap:10px;padding:0 clamp(14px,2.5vw,22px)}
+  .searchbox{width:auto !important;max-width:200px}
+  .page{padding-left:clamp(16px,3vw,28px);padding-right:clamp(16px,3vw,28px)}
+}
+
+/* ---- ≤860px: sidebar becomes an icon rail; topbar declutters ---- */
+@media (max-width:860px){
+  /* force the icon-rail regardless of the JS collapse state */
+  .side{width:64px !important;padding:16px 8px;gap:4px}
+  .side .lbl,.side .nav-label,.side .side-brand .brand-text,.side .side-card{display:none !important}
+  .side .side-brand{justify-content:center;padding:6px 0 12px}
+  .side .nav-item{justify-content:center;padding:0;width:48px;margin:0 auto}
+  /* the lock-pill 'Plus' label can't fit in a rail — show only the lock glyph */
+  .side .nav-item .lock-pill{position:absolute;top:5px;right:5px;left:auto;margin:0 !important;height:14px;padding:0 3px;gap:0}
+  .side .nav-item .lock-pill svg{display:block}
+  /* the active 3px accent bar would sit off the rail edge — pull it in */
+  .side .nav-item.active > span:last-child{left:6px !important}
+
+  /* topbar: drop the (redundant) search — 'Ask Kithra' lives in the nav —
+     and let the title truncate so the controls always fit */
+  .topbar{gap:8px;padding:0 14px}
+  .topbar .searchbox{display:none}
+  .topbar h2.pt{font-size:16px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* mode switch compacts: icon-only (label is a bare text node, so collapse it
+     with font-size:0 — the SVG keeps its explicit width/height attrs) */
+  .modeswitch button{padding:0 12px;gap:0;font-size:0}
+  .modeswitch button > svg{font-size:initial}
+  .modeswitch .thumb{width:calc(50% - 4px)}
+}
+
+/* ---- ≤640px: maximise content; plan pill goes icon-only ---- */
+@media (max-width:640px){
+  .topbar{height:58px;gap:6px}
+  /* plan pill keeps its tier glyph + caret, hides the word to save space */
+  .plan-pill{padding:0 9px;gap:5px;font-size:0}
+  .plan-pill > svg{font-size:0}
+  /* page rhythm tightens up */
+  .page{padding-top:20px;padding-bottom:48px}
+  .sec-title h3{font-size:15px}
+  /* segmented controls and toolbars wrap instead of overflowing */
+  .lib-toolbar,.pt-filters,.voice-bar,.ob-actions{gap:8px}
+  /* big metric numbers scale down a touch so cards don't clip */
+  .metric .val .n{font-size:30px}
+  .h1{font-size:clamp(28px,8vw,40px)}
+  .h2{font-size:clamp(22px,6vw,30px)}
+}
+
+/* ---- ≤480px: phone. Rail stays; ensure zero horizontal escape ---- */
+@media (max-width:480px){
+  .side{width:58px !important;padding:14px 6px}
+  .side .nav-item{width:46px;height:46px}
+  .topbar{padding:0 10px;gap:6px}
+  /* modals / cards / sticky bars must never be wider than the viewport */
+  .lc-card,.kt-perm,.lc-confirm-card{width:calc(100vw - 28px) !important;max-width:none}
+  .lc-pill,.kt-toast,.lib-selbar{max-width:calc(100vw - 20px)}
+  /* OTP boxes are big & square — keep them tappable but on-screen */
+  .otp-row{gap:6px}
+  .otp-box{font-size:19px;max-width:46px}
+  /* auth + onboarding paddings tighten */
+  .auth-card,.ob-main{padding-left:18px;padding-right:18px}
+  /* pricing cards already stack (g-3→1fr at 720px); make the float gentle */
+  .price-card.pop{transform:none}
+  /* dashboard hero text never clipped */
+  .display{line-height:1.08}
+}
+
+/* ---- landscape phones / very short viewports: don't waste vertical ---- */
+@media (max-height:480px) and (max-width:920px){
+  .topbar{height:52px}
+  .side-brand{padding-top:4px;padding-bottom:8px}
+}
+
+/* ---- guard rail: kill accidental horizontal scroll anywhere small ---- */
+@media (max-width:860px){
+  html,body{overflow-x:hidden}
+  .app-scroll{overflow-x:hidden}
+}

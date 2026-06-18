@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kithra</string>
+    <string name="title_activity_main">Kithra</string>
+    <string name="package_name">com.kithra.app</string>
+    <string name="custom_url_scheme">com.kithra.app</string>
+</resources>
