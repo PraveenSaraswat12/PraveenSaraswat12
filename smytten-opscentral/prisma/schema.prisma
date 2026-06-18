@@ -1,0 +1,170 @@
+// Smytten OpsCentral — Prisma schema (Phase 1: Delhivery Courier Intelligence)
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Runtime connection is supplied via a driver adapter (see src/lib/prisma.ts).
+  // The CLI (migrate/generate) reads the URL from prisma.config.ts.
+}
+
+// ── Auth & roles ───────────────────────────────────────────────────────
+enum Role {
+  OPS_EXEC // Ops execution team — operational dashboard
+  OPS_LEAD // Ops leadership — RAG status + weekly summary
+  FINANCE // Finance team — COD / cost lens
+  VENDOR // Vendor review — clean SLA report only
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  passwordHash String
+  name         String?
+  role         Role          @default(OPS_EXEC)
+  createdAt    DateTime      @default(now())
+  uploads      UploadBatch[]
+
+  gmailConnections    GmailConnection[]
+  reviewedExtractions EmailExtraction[] @relation("reviewer")
+
+  @@map("users")
+}
+
+// ── CSV upload tracking ────────────────────────────────────────────────
+model UploadBatch {
+  id           String           @id @default(cuid())
+  uploadedAt   DateTime         @default(now())
+  uploadedById String?
+  uploadedBy   User?            @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  fileName     String
+  rowCount     Int              @default(0)
+  // How many rows we could not parse into a usable record
+  errorCount   Int              @default(0)
+  // Header row exactly as seen in the uploaded file (for audit / mapping debugging)
+  sourceHeader String?
+  records      DeliveryRecord[]
+
+  @@index([uploadedAt])
+  @@map("upload_batches")
+}
+
+// Normalised delivery lifecycle status, derived from Delhivery's raw status text.
+enum DeliveryStatus {
+  DELIVERED
+  RTO // Returned to origin
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  PENDING_PICKUP
+  NDR // Non-delivery report / undelivered attempt
+  LOST
+  CANCELLED
+  UNKNOWN
+}
+
+// ── Delivery records (one row per Delhivery shipment / AWB) ─────────────
+model DeliveryRecord {
+  id      String      @id @default(cuid())
+  batchId String
+  batch   UploadBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  awb          String
+  orderDate    DateTime?
+  pickupDate   DateTime?
+  deliveryDate DateTime?
+
+  status    DeliveryStatus @default(UNKNOWN)
+  rawStatus String? // original status text from the CSV, preserved for audit
+
+  isRTO       Boolean @default(false)
+  ndrAttempts Int     @default(0)
+
+  pincode String?
+  state   String?
+  zone    String?
+
+  weight    Float? // chargeable weight (kg)
+  codAmount Float? // COD value (INR)
+
+  createdAt DateTime @default(now())
+
+  @@index([batchId])
+  @@index([awb])
+  @@index([zone])
+  @@index([state])
+  @@index([pincode])
+  @@index([status])
+  @@index([isRTO])
+  @@index([orderDate])
+  @@index([pickupDate])
+  @@index([deliveryDate])
+  @@map("delivery_records")
+}
+
+// ── Email intelligence (Phase 1 item 6) ────────────────────────────────
+
+// Stored Gmail OAuth credentials for the connected account.
+model GmailConnection {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email        String
+  refreshToken String
+  accessToken  String?
+  expiresAt    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("gmail_connections")
+}
+
+enum EmailCategory {
+  CHARGEBACK
+  COURIER_ESCALATION
+  INWARD
+  OTHER
+}
+
+enum ExtractionStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum RecordSource {
+  EMAIL
+  MANUAL
+}
+
+// One structured record extracted from a matched email, awaiting review.
+model EmailExtraction {
+  id             String           @id @default(cuid())
+  category       EmailCategory
+  status         ExtractionStatus @default(PENDING)
+  source         RecordSource     @default(EMAIL)
+  threadId       String
+  messageId      String?
+  emailDate      DateTime?
+  subject        String?
+  fromAddress    String?
+  gmailThreadUrl String?
+  // LLM-extracted fields (shape varies per category — see rules.extractFields)
+  data           Json
+  model          String?
+  confidence     Float?
+  rawSnippet     String?
+  createdAt      DateTime         @default(now())
+  reviewedAt     DateTime?
+  reviewedById   String?
+  reviewedBy     User?            @relation("reviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([threadId, category])
+  @@index([status])
+  @@index([category])
+  @@map("email_extractions")
+}
