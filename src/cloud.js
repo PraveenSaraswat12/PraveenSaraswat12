@@ -1,3 +1,5 @@
+import { createClient } from '@supabase/supabase-js';
+
 /* ============================================================
    KITHRA — optional cloud backend (Supabase + Gemma)
    ------------------------------------------------------------
@@ -16,20 +18,30 @@ function getConfig() {
   return null;
 }
 
-let _client = null, _clientPromise = null;
-async function getClient() {
+// supabase-js is BUNDLED (not a runtime CDN import) so auth works even on
+// networks that block third-party CDNs, and a blocked import can never leave
+// the login button spinning forever.
+let _client = null;
+function getClient() {
   const cfg = getConfig();
   if (!cfg) return null;
-  if (_client) return _client;
-  if (!_clientPromise) {
-    _clientPromise = (async () => {
-      const mod = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
-      _client = mod.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
-      return _client;
-    })();
+  if (!_client) {
+    _client = createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: 'implicit' },
+    });
   }
-  return _clientPromise;
+  return _client;
 }
+
+// Never let a stalled network leave the UI spinning — reject with a clear,
+// user-facing message instead.
+function withTimeout(promise, ms, message) {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms)),
+  ]);
+}
+const NET_MSG = 'Couldn’t reach the account server — check your connection and try again.';
 
 // ---- device-bound encryption (AES-GCM 256 via WebCrypto) ----
 // Content synced to the cloud is encrypted on-device first; the key never
@@ -74,13 +86,13 @@ const Cloud = {
   config: () => getConfig(),
   saveConfig(url, key) {
     try { localStorage.setItem(CFG_KEY, JSON.stringify({ SUPABASE_URL: String(url).trim().replace(/\/$/, ''), SUPABASE_ANON_KEY: String(key).trim() })); } catch (e) {}
-    _client = null; _clientPromise = null;
+    _client = null;
   },
-  clearConfig() { try { localStorage.removeItem(CFG_KEY); } catch (e) {} _client = null; _clientPromise = null; },
+  clearConfig() { try { localStorage.removeItem(CFG_KEY); } catch (e) {} _client = null; },
 
   async getUser() { try { const c = await getClient(); if (!c) return null; const { data } = await c.auth.getUser(); return data?.user || null; } catch (e) { return null; } },
-  async signUp(email, password) { const c = await getClient(); if (!c) throw new Error('Connect your cloud first'); const { data, error } = await c.auth.signUp({ email, password }); if (error) throw error; return data; },
-  async signIn(email, password) { const c = await getClient(); if (!c) throw new Error('Connect your cloud first'); const { data, error } = await c.auth.signInWithPassword({ email, password }); if (error) throw error; return data; },
+  async signUp(email, password) { const c = await getClient(); if (!c) throw new Error('Connect your cloud first'); const { data, error } = await withTimeout(c.auth.signUp({ email, password }), 20000, NET_MSG); if (error) throw error; return data; },
+  async signIn(email, password) { const c = await getClient(); if (!c) throw new Error('Connect your cloud first'); const { data, error } = await withTimeout(c.auth.signInWithPassword({ email, password }), 20000, NET_MSG); if (error) throw error; return data; },
   async signOut() { const c = await getClient(); if (c) await c.auth.signOut(); },
 
   // ---- password reset: email a link, then set a new password on return ----
@@ -106,10 +118,14 @@ const Cloud = {
   // URL to be enabled in Supabase → Authentication → Providers / URL config.
   async signInWithGoogle(redirectTo) {
     const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
-    const { data, error } = await c.auth.signInWithOAuth({
+    // Return to the app's CLEAN base URL (origin + path, no #hash route) so the
+    // session lands on a stable, allow-listable URL. This exact URL must be set
+    // in Supabase → Authentication → URL Configuration (Site URL + Redirect URLs).
+    const cleanUrl = window.location.origin + window.location.pathname;
+    const { data, error } = await withTimeout(c.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: redirectTo || window.location.href, queryParams: { prompt: 'select_account' } },
-    });
+      options: { redirectTo: redirectTo || cleanUrl, queryParams: { prompt: 'select_account' } },
+    }), 20000, NET_MSG);
     if (error) throw error; return data;
   },
 
