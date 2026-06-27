@@ -15,19 +15,18 @@ verification):
    key. (The anon key is safe to use in the app; row-level security protects data.)
 3. **SQL Editor → New query** → paste all of [`schema.sql`](./schema.sql) → **Run**.
 
-## 2) Google AI Studio (Gemma key — free) — ~2 min
-1. Go to **aistudio.google.com** → **Get API key** → create one. (Free tier.)
+## 2) Groq API key (free) — ~2 min
+1. Go to **console.groq.com** → **API Keys** → create one. (Free tier, very fast.)
 2. Keep it secret — it never goes in the app; it lives in the Edge Function below.
 
 ## 3) Deploy the AI Edge Function (keeps the key server-side)
-Install the Supabase CLI (`npm i -g supabase`), then from this `cloud/` folder:
+This function powers both AI answers and **cloud audio transcription** (Groq
+Whisper). Install the Supabase CLI (`npm i -g supabase`), then from this `cloud/` folder:
 ```bash
 supabase login
 supabase link --project-ref <your-project-ref>     # ref is in your project URL
 supabase functions deploy ai
-supabase secrets set GOOGLE_AI_API_KEY=<your-google-key>
-# optional, to pick a Gemma model:
-supabase secrets set GEMMA_MODEL=gemma-3-27b-it
+supabase secrets set GROQ_API_KEY=<your-groq-key>
 ```
 
 ## 4) Connect it in the app
