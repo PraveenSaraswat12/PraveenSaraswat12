@@ -322,7 +322,7 @@ function AppShell() {
 
 /* ---------- sidebar ---------- */
 function Sidebar() {
-  const { route, go, sidebarCollapsed, setSidebarCollapsed, planAllows } = useApp();
+  const { route, go, sidebarCollapsed, setSidebarCollapsed, planAllows, openCapture } = useApp();
   const groups = [
     { key:'main', label:'Workspace' },
     { key:'data', label:'Your data' },
@@ -347,6 +347,12 @@ function Sidebar() {
           <span className="wordmark" style={{ fontFamily:'var(--font-display)', fontSize:22, fontWeight:600, letterSpacing:'-.02em', lineHeight:1 }}>Kithra</span>
           <span className="brand-tag" style={{ fontFamily:'var(--font-display)', fontStyle:'italic', fontSize:10.5, color:'var(--ink-3)', letterSpacing:'.01em', whiteSpace:'nowrap' }}>Where talk becomes insight</span>
         </div>
+      </div>
+      <div className="nav-group">
+        <a className="nav-item nav-live" onClick={()=>openCapture('listen')} title="Start live voice capture">
+          <span className="ic"><Icon name="mic" size={19} /></span>
+          <span className="lbl">Live capture</span>
+        </a>
       </div>
       {groups.map(g => (
         <div className="nav-group" key={g.key}>

@@ -41,7 +41,7 @@ function Panel({ title, sub, action, children, style, pad = true }) {
 }
 
 function GreetHeader() {
-  const { go, user } = useApp();
+  const { go, user, openCapture } = useApp();
   const hour = new Date().getHours();
   const greet = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const name = user && user.email ? user.email.split('@')[0] : 'there';
@@ -51,7 +51,10 @@ function GreetHeader() {
         <span className="eyebrow">Where talk becomes insight</span>
         <h1 className="display" style={{ fontSize:'clamp(22px,3vw,30px)', margin:0 }}>{greet}, {name}</h1>
       </div>
-      <button className="btn btn-primary" onClick={()=>go('analyze')}><Icon name="plus" size={16} />Add recording</button>
+      <div className="row" style={{ gap:8, flexWrap:'wrap' }}>
+        <button className="btn btn-primary" onClick={()=>openCapture('listen')}><Icon name="mic" size={16} />Go live</button>
+        <button className="btn btn-soft" onClick={()=>go('analyze')}><Icon name="plus" size={16} />Add recording</button>
+      </div>
     </div>
   );
 }
