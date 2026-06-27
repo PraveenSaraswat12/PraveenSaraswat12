@@ -142,7 +142,8 @@ const Cloud = {
   async fetchBooks() {
     try {
       const c = await getClient(); if (!c) return null; const u = await Cloud.getUser(); if (!u) return null;
-      const { data } = await c.from('books').select('*').order('created_at', { ascending: false });
+      // Scope to this user EXPLICITLY (defense-in-depth) — never rely on RLS alone.
+      const { data } = await c.from('books').select('*').eq('user_id', u.id).order('created_at', { ascending: false });
       return await Promise.all((data || []).map(async (b) => ({ ...b, notes: await decStr(b.notes) })));
     } catch (e) { return null; }
   },
@@ -173,7 +174,10 @@ const Cloud = {
     try {
       const c = await getClient(); if (!c) return null;
       const u = await Cloud.getUser(); if (!u) return null;
-      const { data } = await c.from('recordings').select('*').order('created_at', { ascending: false }).limit(50);
+      // Scope to this user EXPLICITLY (defense-in-depth) — never rely on RLS alone,
+      // so a recording can never appear under another account even if the
+      // database policy is missing/misconfigured.
+      const { data } = await c.from('recordings').select('*').eq('user_id', u.id).order('created_at', { ascending: false }).limit(50);
       return await Promise.all((data || []).map(async (r) => {
         let insights = null;
         if (r.insights) { try { insights = JSON.parse(await decStr(r.insights)); } catch (e) { insights = null; } }
