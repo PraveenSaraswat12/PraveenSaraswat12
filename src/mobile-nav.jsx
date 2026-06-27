@@ -117,7 +117,7 @@ export function BottomSheet({ open, onClose, title, children, maxHeight = '82vh'
    MoreSheet — secondary destinations + account, theme, plan
    ============================================================ */
 function MoreSheet({ open, onClose }) {
-  const { go, route, t, setTweak, plan, mode, user, refreshUser, showToast, planAllows } = useApp();
+  const { go, route, t, setTweak, plan, mode, user, refreshUser, showToast, planAllows, openCapture } = useApp();
   const id = mobileIdentity(user);
 
   const nav = (r) => { onClose(); go(r); };
@@ -156,6 +156,14 @@ function MoreSheet({ open, onClose }) {
 
       {/* secondary destinations */}
       <div className="msheet-list">
+        <button className="msheet-row" onClick={() => { onClose(); openCapture('listen'); }}>
+          <span className="msheet-row-ic"><Icon name="mic" size={20} /></span>
+          <span className="stack grow" style={{ gap:1, minWidth:0, textAlign:'left' }}>
+            <span className="msheet-row-label">Live capture</span>
+            <span className="msheet-row-sub">Listen or converse in real time</span>
+          </span>
+          <Icon name="chevR" size={17} style={{ opacity:.5 }} />
+        </button>
         {dests.map(d => {
           const locked = d.id === 'patterns' && !planAllows('plus');
           return (
@@ -238,13 +246,13 @@ export function MobileTabBar() {
    on the screen itself or in the More sheet).
    ============================================================ */
 export function MobileHeader() {
-  const { route, go, t, setTweak } = useApp();
+  const { route, go, t, setTweak, openCapture } = useApp();
   const title = ROUTES[route]?.label || 'Kithra';
 
   // the one key action for each screen (icon + handler). null = no action.
   const ACTIONS = {
-    dashboard: { ic:'plus',   label:'Add recording', act:() => go('analyze') },
-    ask:       { ic:'mic',    label:'Voice',         act:() => go('analyze') },
+    dashboard: { ic:'mic',    label:'Go live',       act:() => openCapture('listen') },
+    ask:       { ic:'mic',    label:'Live capture',  act:() => openCapture('listen') },
     library:   { ic:'plus',   label:'Add recording', act:() => go('analyze') },
     analyze:   { ic:'plus',   label:'New',           act:() => go('analyze') },
     books:     { ic:'plus',   label:'Add book',      act:() => go('books') },
