@@ -538,7 +538,7 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
   const [askConsent, setAskConsent] = React.useState(false);
   const { hasConsent, grantConsent, redact, updateClip } = useApp();
   const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
-  const [useCloud, setUseCloud] = React.useState(false); // default to on-device (private, no API cost); users can still switch to Kithra AI
+  const [useCloud, setUseCloud] = React.useState(cloudOn); // when an account is connected, default to Kithra AI (fast, accurate, no 240MB download); fully switchable to private on-device
   const finish = (t) => {
     const final = redact ? redactPII((t || '').trim()) : (t || '').trim();
     setText(final); setState('done');
@@ -653,7 +653,13 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
         <div className="row" style={{ gap: 12 }}><LiveWave bars={22} height={34} color="var(--accent)" /><span className="faint" style={{ fontSize: 13 }}>Transcribing your audio…</span></div>
       )}
       {state === 'error' && (
-        <div className="stack" style={{ gap: 10 }}><p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>{err}</p><button className="btn btn-soft btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}>Try again</button></div>
+        <div className="stack" style={{ gap: 10 }}>
+          <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>{err}</p>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <button className="btn btn-soft btn-sm" onClick={run}>Try again</button>
+            {cloudOn && <button className="btn btn-primary btn-sm" onClick={() => { setUseCloud(u => !u); setErr(''); setState('idle'); }}>{useCloud ? 'Switch to on-device' : 'Switch to Kithra AI'}</button>}
+          </div>
+        </div>
       )}
       {state === 'done' && (
         <div className="stack" style={{ gap: 14 }}>
