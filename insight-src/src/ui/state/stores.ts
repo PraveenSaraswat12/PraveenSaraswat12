@@ -426,6 +426,16 @@ export const useData = create<DataState>((set, get) => ({
     persistTimer = setTimeout(() => {
       const s = get();
       if (s.parsing || !s.sources.length) return;
+      // enforce the plan's workspace cap for NEW workspaces
+      const cap = billing.plan(billing.currentPlan()).limits.maxWorkspaces;
+      const isNew = !s.workspaceList.some((w) => w.id === s.wsId);
+      if (cap !== -1 && isNew && s.workspaceList.length >= cap) {
+        useApp.getState().toast(
+          'warn',
+          `Your plan keeps ${cap} saved workspaces — this one won't be saved. Delete an old one or upgrade for more.`,
+        );
+        return;
+      }
       security.saveWorkspace(s.toWorkspace()).then(
         () => get().refreshList(),
         (e) => useApp.getState().toast('warn', e instanceof Error ? e.message : 'Could not save locally'),
@@ -439,6 +449,17 @@ function ingest(sources: DataSource[], tables: DataTable[], warnings: { sourceNa
   const st = useData.getState();
   for (const w of warnings) toast('warn', `${w.sourceName}: ${w.message}`);
   if (!sources.length && !tables.length) return;
+  // enforce the plan's rows-per-table cap at the door
+  const rowCap = billing.plan(billing.currentPlan()).limits.maxRowsPerTable;
+  if (rowCap !== -1) {
+    for (const t of tables) {
+      if (t.rowCount > rowCap) {
+        t.rows = t.rows.slice(0, rowCap);
+        t.rowCount = rowCap;
+        toast('warn', `${t.name}: kept the first ${rowCap.toLocaleString()} rows — your plan's per-table limit. Upgrade for more.`);
+      }
+    }
+  }
   const allTables = [...st.tables, ...tables];
   const relations = engine.detectRelations(allTables);
   useData.setState({
@@ -466,6 +487,8 @@ interface ChatState {
   suggestions(): string[];
 }
 
+const FORECAST_RE = /\b(forecast|project(ion)?|predict|next \d+ (month|week|day)|expect)\b/i;
+
 export const useChat = create<ChatState>((set) => ({
   busy: false,
 
@@ -479,6 +502,18 @@ export const useChat = create<ChatState>((set) => ({
     const data = useData.getState();
     const userTurn: ChatTurn = { id: uid('c'), role: 'user', text: q, createdAt: new Date().toISOString() };
     useData.setState({ chat: [...data.chat, userTurn] });
+
+    // forecasts & projections are a Premium tool
+    if (FORECAST_RE.test(q) && !billing.canUseScenarios()) {
+      const turn: ChatTurn = {
+        id: uid('c'), role: 'assistant',
+        text: 'Forecasts & trend projections are part of Premium. Everything else — totals, breakdowns, trends of past data, aging, comparisons — I can answer right now. Upgrade on the Pricing page to unlock projections.',
+        createdAt: new Date().toISOString(), source: 'system',
+      };
+      useData.setState((s) => ({ chat: [...s.chat, turn] }));
+      return;
+    }
+
     set({ busy: true });
     billing.recordAIQuestion();
 
@@ -536,7 +571,7 @@ export const useChat = create<ChatState>((set) => ({
     if (metric && date) out.push(`Monthly trend of ${metric}`);
     if (cat) out.push(`Top 10 ${cat} by ${metric ?? 'count'}`);
     if (date && metric) out.push(`Aging of ${metric}`);
-    if (metric && date) out.push(`Forecast ${metric} for the next 3 months`);
+    if (metric && date && billing.canUseScenarios()) out.push(`Forecast ${metric} for the next 3 months`);
     out.push('Describe my data');
     return out.slice(0, 5);
   },

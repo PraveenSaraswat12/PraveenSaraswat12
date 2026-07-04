@@ -38,7 +38,7 @@ overdue story every business owner feels in their stomach).
 | | Free | Pro $30/mo · $300/yr | Premium $90/mo · $900/yr | Enterprise |
 |---|---|---|---|---|
 | Job | Habit & wow | The working analyst | The data-driven operator | Teams & control |
-| Hook | Sample-to-dashboard in 1 click | Cloud AI + bigger files + exports + backups | Scenarios & forecasts, unlimited everything | SSO, residency, support |
+| Hook | Sample-to-dashboard in 1 click | Cloud AI + bigger files + exports + backups | Forecasts & projections, unlimited everything | SSO, residency, support |
 
 - Pro maps to the existing Kithra backend plan `plus`, Premium to `premium` —
   **one subscription works across all Kithra products** (audio + data). That
@@ -62,7 +62,7 @@ overdue story every business owner feels in their stomach).
    button exists precisely for this; track manually at first.
 2. Free→Pro levers: 2 MB file cap (real exports are bigger), cloud AI
    answers on ambiguous questions, CSV export, encrypted backups.
-3. Pro→Premium levers: what-if scenarios & forecasts, unlimited datasets.
+3. Pro→Premium levers: forecasts & trend projections, unlimited datasets.
 4. Churn defense: workspaces accumulate on-device → switching cost is real
    but user-respecting (export anytime).
 
@@ -97,4 +97,5 @@ free→paid conversion, MRR. Revisit pricing when free→paid > 4%.
 2. Scheduled email digests of insights (Supabase cron + edge function).
 3. Team workspaces (shared encryption keys) → unlocks real Enterprise.
 4. Public read-only dashboard links (watermarked on Free — viral loop).
-5. WebWorker parsing for 100 MB+ files.
+5. What-if scenario modelling (Premium).
+6. WebWorker parsing for 100 MB+ files.

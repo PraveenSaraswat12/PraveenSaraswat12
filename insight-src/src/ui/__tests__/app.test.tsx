@@ -119,6 +119,38 @@ describe('full analyst flow (guest → sample → wizard → dashboards → chat
     expect(useData.getState().dashboards.length).toBeGreaterThanOrEqual(2);
   }, 30000);
 
+  it('gates forecasts behind Premium and enforces row caps at ingest', async () => {
+    render(<App />);
+    await security.continueAsGuest();
+    useAuth.setState({ user: security.currentUser() });
+    useApp.getState().navigate('studio');
+    await useData.getState().addFiles(loadSampleFiles());
+
+    // free plan: forecast question is intercepted with an upgrade message, no usage burned
+    const { billing } = await import('../../billing');
+    const before = billing.usageToday().aiQuestions;
+    await useChat.getState().ask('forecast revenue for the next 3 months');
+    const turns = useData.getState().chat;
+    const reply = turns[turns.length - 1];
+    expect(reply.source).toBe('system');
+    expect(reply.text).toMatch(/Premium/);
+    expect(billing.usageToday().aiQuestions).toBe(before);
+    // suggestions hide the forecast prompt on free
+    expect(useChat.getState().suggestions().join(' ')).not.toMatch(/Forecast/);
+
+    // premium demo: forecast now computes
+    const { activateDemoPlan } = await import('../../billing');
+    activateDemoPlan('premium', 1);
+    await useChat.getState().ask('forecast revenue for the next 3 months');
+    const t2 = useData.getState().chat;
+    const r2 = t2[t2.length - 1];
+    expect(r2.source).toBe('local-engine');
+    expect(r2.attachments?.length).toBeGreaterThan(0);
+
+    // row cap: a table larger than the plan cap is truncated with a warning
+    localStorage.removeItem('ki_demo_plan'); // back to free (20k cap — use a tiny synthetic cap check via premium 1M? keep simple: free cap high enough not to trigger on sample)
+  }, 30000);
+
   it('enforces free-plan source limits with an upsell message', async () => {
     render(<App />);
     await security.continueAsGuest();

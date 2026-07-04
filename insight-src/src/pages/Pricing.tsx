@@ -15,7 +15,7 @@ const LIMIT_ROWS: { label: string; get: (p: PlanDef) => string }[] = [
   { label: 'AI questions / day', get: (p) => p.limits.aiQuestionsPerDay.toLocaleString() },
   { label: 'Cloud AI analyst', get: (p) => (p.limits.cloudAI ? 'Yes' : '—') },
   { label: 'Exports', get: (p) => (p.limits.exports ? 'Yes' : '—') },
-  { label: 'Scenarios & forecasts', get: (p) => (p.limits.scenarios ? 'Yes' : '—') },
+  { label: 'Forecasts & projections', get: (p) => (p.limits.scenarios ? 'Yes' : '—') },
   { label: 'Workspaces', get: (p) => (p.limits.maxWorkspaces === -1 ? 'Unlimited' : String(p.limits.maxWorkspaces)) },
 ];
 

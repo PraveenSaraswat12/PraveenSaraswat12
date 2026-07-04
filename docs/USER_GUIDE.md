@@ -14,8 +14,9 @@
    or slice and **everything re-filters together**.
 4. **Chat with your data** — "Total revenue by region", "Top 10 customers",
    "Aging of outstanding payments", "West vs North", "Forecast next 3
-   months", "Describe my data". Every number is genuinely computed from your
-   rows. Pin any answer's chart to a dashboard with the pin button.
+   months" (a Premium tool), "Describe my data". Every number is genuinely
+   computed from your rows. Pin any answer's chart to a dashboard with the
+   pin button.
 5. **Insights tab** — automatic findings: trends, concentration risks
    ("one customer is 53% of revenue"), overdue aging, data-quality issues.
 

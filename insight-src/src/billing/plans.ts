@@ -65,7 +65,7 @@ export const PLANS: PlanDef[] = [
     backendPlan: 'premium',
     features: [
       'Everything in Pro',
-      'What-if scenarios & forecasts',
+      'Forecasts & trend projections',
       'Unlimited datasets & workspaces',
       '100 MB files · 1M rows per table',
       'First access to new features',
