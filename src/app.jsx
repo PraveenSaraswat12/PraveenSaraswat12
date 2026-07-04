@@ -172,7 +172,9 @@ function AppProvider() {
   // stable account id: changes only when the identity actually changes (not on
   // every tab-focus session re-check), so we don't re-hydrate / leak audio URLs.
   const uid = user === undefined ? undefined : (user ? user.id : null);
-  React.useEffect(() => { ownerRef.current = uid || 'local'; }, [uid]);
+  // Keep the recording owner current SYNCHRONOUSLY (during render), so a clip
+  // saved right after sign-in can never be tagged with the stale 'local' owner.
+  ownerRef.current = uid || 'local';
   // hydrate recordings: local-first (IndexedDB, with playable audio), then merge
   // any cloud-only rows. On sign-out, drop the in-memory list and free audio URLs
   // but KEEP on-device storage, so signing back in restores everything.
@@ -184,11 +186,14 @@ function AppProvider() {
       return;
     }
     (async () => {
+      // one-time: claim any legacy unowned/'local' clips on THIS device to the
+      // signed-in account, then read STRICTLY scoped clips. New clips always
+      // carry a real owner, so nothing here ever crosses accounts.
+      try { await ClipStore.adoptLocal(uid); } catch (e) {}
       let local = [];
       try { local = await ClipStore.getClips(uid); } catch (e) {}
       if (!on) return;
       if (local.length) setClips(local);
-      try { local.forEach(c => ClipStore.patchClip(c.id, { owner: uid })); } catch (e) {} // adopt unclaimed clips
       try {
         const rows = await (window.KithraCloud && window.KithraCloud.fetchRecordings && window.KithraCloud.fetchRecordings());
         if (on && Array.isArray(rows)) setClips(cs => { const have = new Set(cs.map(c => c.id)); return [...cs, ...rows.filter(r => !have.has(r.id))]; });
