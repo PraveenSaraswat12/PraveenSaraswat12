@@ -105,6 +105,27 @@ async function main() {
   txt = await bodyText(pg);
   check('a different account does NOT see the first account’s recording', !/Durability Demo Call/.test(txt));
 
+  // REGRESSION GUARD (cross-account leak): a clip saved as 'local'/unowned — the
+  // exact shape the app wrote before login settled — must never surface in ANY
+  // signed-in account via getClips. It is only ever claimed to one account
+  // explicitly, via adoptLocal.
+  const leak = await pg.evaluate(async () => {
+    const c = { id: 'leak-clip-1', name: 'Leaky Local Clip', durSec: 5, source: 'upload', ts: Date.now() };
+    await window.KithraClipStore.putClip(c, new Blob([new Uint8Array([9])], { type: 'audio/webm' }), 'local');
+    const a = await window.KithraClipStore.getClips('acct-A');
+    const b = await window.KithraClipStore.getClips('acct-B');
+    return { aSees: a.some((x) => x.id === 'leak-clip-1'), bSees: b.some((x) => x.id === 'leak-clip-1') };
+  });
+  check('a “local”/unowned clip does NOT leak into any account (strict scoping)', !leak.aSees && !leak.bSees, JSON.stringify(leak));
+
+  const adopt = await pg.evaluate(async () => {
+    const n = await window.KithraClipStore.adoptLocal('acct-A');
+    const a = await window.KithraClipStore.getClips('acct-A');
+    const b = await window.KithraClipStore.getClips('acct-B');
+    return { claimed: n, aSees: a.some((x) => x.id === 'leak-clip-1'), bSees: b.some((x) => x.id === 'leak-clip-1') };
+  });
+  check('adoptLocal claims a legacy local clip to ONE account only', adopt.aSees && !adopt.bSees, JSON.stringify(adopt));
+
   // ---------------------------------------------------------
   console.log('\n[2] Live capture is single-tab, with take-over hand-off');
   // ---------------------------------------------------------

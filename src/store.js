@@ -45,8 +45,11 @@ function openDB() {
 function store(mode) { return openDB().then((db) => db.transaction(STORE, mode).objectStore(STORE)); }
 const done = (req) => new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
 
-// belongs to this account, or is an unclaimed local clip we can adopt
-const mineFor = (owner) => (r) => r && (r.owner === owner || r.owner === 'local' || !r.owner);
+// Strict per-account scoping: a clip belongs to exactly ONE owner. We do NOT
+// surface 'local'/unowned clips to a signed-in account — that cross-account
+// "adopt on read" leaked recordings between accounts sharing a browser. Legacy
+// local clips are claimed explicitly via adoptLocal() on sign-in instead.
+const mineFor = (owner) => (r) => r && r.owner === owner;
 
 // Save a clip's metadata + audio blob (strips the ephemeral object URL).
 export async function putClip(clip, blob, owner) {
@@ -108,7 +111,23 @@ export async function pruneClips(owner, keep = 50) {
   } catch (e) {}
 }
 
+// One-time migration: claim any legacy unowned/'local' clips on this device to
+// `owner`. New clips are always saved with a real owner, so after the first
+// post-update sign-in this finds nothing. Returns how many were claimed.
+export async function adoptLocal(owner) {
+  if (!hasIDB() || !owner || owner === 'local') return 0;
+  try {
+    const os = await store('readwrite');
+    const all = await done(os.getAll());
+    let n = 0;
+    for (const r of (all || [])) {
+      if (r && (r.owner === 'local' || !r.owner)) { await done(os.put({ ...r, owner, savedAt: Date.now() })); n++; }
+    }
+    return n;
+  } catch (e) { return 0; }
+}
+
 // expose for debugging + e2e (same API as the named exports above)
 if (typeof window !== 'undefined') {
-  window.KithraClipStore = { hasIDB, putClip, patchClip, deleteClip, getClips, pruneClips };
+  window.KithraClipStore = { hasIDB, putClip, patchClip, deleteClip, getClips, pruneClips, adoptLocal };
 }
