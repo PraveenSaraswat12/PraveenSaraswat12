@@ -344,7 +344,7 @@ export function ChatPanel() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem-1px)] md:h-[calc(100vh-3.5rem-1px)] max-w-3xl mx-auto w-full">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem-4.5rem)] md:h-[calc(100vh-3.5rem-1px)] max-w-3xl mx-auto w-full">
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
         {!data.chat.length && (
           <EmptyState

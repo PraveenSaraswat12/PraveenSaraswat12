@@ -48,7 +48,7 @@ function HeroVisual() {
           <span className="w-2.5 h-2.5 rounded-full bg-amberx-400/70" />
           <span className="w-2.5 h-2.5 rounded-full bg-glow-400/70" />
         </div>
-        <Badge tone="teal">live · sample-orders.csv</Badge>
+        <Badge tone="teal">preview · sample-orders.csv</Badge>
       </div>
       <div className="grid grid-cols-3 gap-3 mb-4">
         {[['Revenue', '₹4.2M', '+18%'], ['Orders', '1,284', '+6%'], ['Overdue', '₹312K', '−9%']].map(([t, v, d]) => (

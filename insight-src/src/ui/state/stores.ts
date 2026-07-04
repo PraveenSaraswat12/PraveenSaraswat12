@@ -101,10 +101,16 @@ export const useAuth = create<AuthState>((set) => ({
       if (u && u.provider !== 'guest') billing.refreshSubscription().catch(() => {});
     });
     billing.onPlanChange((plan) => set({ plan }));
+    const cameFromOAuth = typeof location !== 'undefined' && /access_token|code=/.test(location.hash + location.search);
     const u = await security.init();
     set({ user: u, booted: true, plan: billing.currentPlan() });
     if (u && u.provider !== 'guest') {
       billing.refreshSubscription().then(() => set({ plan: billing.currentPlan() })).catch(() => {});
+    }
+    if (u && cameFromOAuth) {
+      // returning from Google sign-in: clean the token hash, land in the studio
+      try { history.replaceState(null, '', location.pathname + location.search); } catch { /* fine */ }
+      useApp.getState().navigate('studio');
     }
   },
   async google() { await security.signInWithGoogle(); },
