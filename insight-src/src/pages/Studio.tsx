@@ -10,10 +10,11 @@ import {
 } from '../ui/icons';
 import { useApp, useAuth, useChat, useData, type StudioTab } from '../ui/state/stores';
 import { DashboardsPanel, ChatPanel, InsightsPanel } from './StudioPanels';
+import { GoalsPanel, ProposalPanel, SummaryPanel } from './FlowPanels';
 
 const TABS: { id: StudioTab; label: string; icon: React.ReactNode }[] = [
   { id: 'data', label: 'Data', icon: <TableIcon size={18} /> },
-  { id: 'wizard', label: 'Questions', icon: <WandIcon size={18} /> },
+  { id: 'wizard', label: 'Refine', icon: <WandIcon size={18} /> },
   { id: 'dashboards', label: 'Dashboards', icon: <GridIcon size={18} /> },
   { id: 'chat', label: 'Chat', icon: <ChatIcon size={18} /> },
   { id: 'insights', label: 'Insights', icon: <SparkIcon size={18} /> },
@@ -97,12 +98,20 @@ export default function Studio() {
         </aside>
 
         <main className="flex-1 min-w-0 pb-20 md:pb-6">
-          {data.tab === 'data' && <DataPanel />}
-          {data.tab === 'wizard' && <WizardPanel />}
-          {data.tab === 'dashboards' && <DashboardsPanel />}
-          {data.tab === 'chat' && <ChatPanel />}
-          {data.tab === 'insights' && <InsightsPanel />}
-          {data.tab === 'workspaces' && <WorkspacesPanel />}
+          {/* guided journey after a silent ingest, until the first build */}
+          {data.phase === 'summary' && <SummaryPanel />}
+          {data.phase === 'goals' && <GoalsPanel />}
+          {data.phase === 'proposal' && <ProposalPanel />}
+          {data.phase === 'ready' && (
+            <>
+              {data.tab === 'data' && <DataPanel />}
+              {data.tab === 'wizard' && <WizardPanel />}
+              {data.tab === 'dashboards' && <DashboardsPanel />}
+              {data.tab === 'chat' && <ChatPanel />}
+              {data.tab === 'insights' && <InsightsPanel />}
+              {data.tab === 'workspaces' && <WorkspacesPanel />}
+            </>
+          )}
         </main>
       </div>
 
@@ -305,9 +314,15 @@ function DataPanel() {
 
       {data.tables.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => data.startWizard()}>
-            <WandIcon size={16} /> {data.intent ? 'Refine questions' : 'Answer questions & build dashboards'}
-          </Button>
+          {!data.intent ? (
+            <Button onClick={() => data.setPhase('goals')}>
+              <WandIcon size={16} /> Tell me what you need — build dashboards
+            </Button>
+          ) : (
+            <Button variant="soft" onClick={() => data.startWizard()}>
+              <WandIcon size={16} /> Refine (power options)
+            </Button>
+          )}
           {data.dashboards.length > 0 && (
             <Button variant="soft" onClick={() => data.setTab('dashboards')}><ChartIcon size={16} /> Open dashboards</Button>
           )}
@@ -433,6 +448,8 @@ function WorkspacesPanel() {
   const data = useData();
   const askConfirm = useApp((s) => s.askConfirm);
   useEffect(() => { data.refreshList(); }, []);
+  const localIds = new Set(data.workspaceList.map((w) => w.id));
+  const cloudOnly = data.cloudList.filter((w) => !localIds.has(w.id));
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-5">
@@ -441,6 +458,27 @@ function WorkspacesPanel() {
           New workspace
         </Button>
       </div>
+      {cloudOnly.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-xs font-medium text-mist-400 mb-2 flex items-center gap-1.5">
+            <GlobeIcon size={14} className="text-glow-400" /> In your cloud (not on this device yet)
+          </h3>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {cloudOnly.map((w) => (
+              <Card key={w.id} className="p-4">
+                <div className="text-sm text-mist-50 truncate">{w.name}</div>
+                <div className="text-[11px] text-mist-500 mt-0.5 num">
+                  {w.sourceCount} source{w.sourceCount !== 1 ? 's' : ''} · {w.rowCount.toLocaleString()} rows ·
+                  {' '}{new Date(w.updatedAt).toLocaleDateString()}
+                </div>
+                <Button variant="soft" className="w-full mt-3" onClick={() => data.loadWorkspaceById(w.id)}>
+                  Open from cloud
+                </Button>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
       {!data.workspaceList.length ? (
         <EmptyState icon={<FolderIcon />} title="No saved workspaces" body="Workspaces save automatically (encrypted) once you add data. They'll appear here." />
       ) : (

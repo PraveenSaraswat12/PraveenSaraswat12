@@ -2,11 +2,12 @@
 // the UI and the engine/security/billing modules.
 import { create } from 'zustand';
 import type {
-  ActiveFilter, AnalyticsQuery, ChatTurn, DashboardSpec, DataSource, DataTable,
-  Insight, PlanId, QueryFilter, Relation, SessionUser, ViewId, WidgetSpec,
-  WizardAnswers, WizardQuestion, Workspace, WorkspaceSummary, AnalysisIntent,
+  ActiveFilter, AnalyticsQuery, ChatTurn, ColumnRef, DashboardProposal,
+  DashboardSpec, DataSource, DataTable, GoalAnswers, Insight, PlanId,
+  QueryFilter, Relation, SessionUser, ViewId, WidgetSpec, WizardAnswers,
+  WizardQuestion, Workspace, WorkspaceSummary, AnalysisIntent,
 } from '../../contracts/types';
-import { engine, uid } from '../../engine';
+import { applyProposal, engine, uid } from '../../engine';
 import { security } from '../../security';
 import { billing } from '../../billing';
 import { cloudAI } from '../../platform/cloud';
@@ -133,6 +134,9 @@ export const useAuth = create<AuthState>((set) => ({
 
 export type StudioTab = 'data' | 'wizard' | 'dashboards' | 'chat' | 'insights' | 'workspaces';
 
+/** the guided journey after the first silent ingest */
+export type FlowPhase = 'ready' | 'summary' | 'goals' | 'proposal';
+
 interface DataState {
   wsId: string;
   wsName: string;
@@ -142,11 +146,15 @@ interface DataState {
   relations: Relation[];
   intent?: AnalysisIntent;
   answers?: WizardAnswers;
+  goals?: GoalAnswers;
   dashboards: DashboardSpec[];
   insights: Insight[];
   chat: ChatTurn[];
 
   tab: StudioTab;
+  phase: FlowPhase;
+  proposal: DashboardProposal | null;
+  proposalEnabled: Record<string, boolean>;
   parsing: boolean;
   generating: boolean;
   wizardQuestions: WizardQuestion[];
@@ -154,8 +162,14 @@ interface DataState {
   activeDashboardId: string | null;
   activeFilters: ActiveFilter[];
   workspaceList: WorkspaceSummary[];
+  cloudList: WorkspaceSummary[];
 
   setTab(tab: StudioTab): void;
+  setPhase(p: FlowPhase): void;
+  submitGoals(goals: GoalAnswers): Promise<void>;
+  toggleProposalItem(id: string): void;
+  approveProposal(): Promise<void>;
+  addGlobalFilterColumn(dashId: string, ref: ColumnRef): void;
   newWorkspace(): void;
   addFiles(files: File[]): Promise<void>;
   addUrl(url: string): Promise<void>;
@@ -189,10 +203,13 @@ export const useData = create<DataState>((set, get) => ({
   wsName: 'My analysis',
   createdAt: new Date().toISOString(),
   sources: [], tables: [], relations: [],
-  intent: undefined, answers: undefined,
+  intent: undefined, answers: undefined, goals: undefined,
   dashboards: [], insights: [], chat: [],
 
   tab: 'data',
+  phase: 'ready',
+  proposal: null,
+  proposalEnabled: {},
   parsing: false,
   generating: false,
   wizardQuestions: [],
@@ -200,14 +217,71 @@ export const useData = create<DataState>((set, get) => ({
   activeDashboardId: null,
   activeFilters: [],
   workspaceList: [],
+  cloudList: [],
 
   setTab(tab) { set({ tab }); },
+  setPhase(p) { set({ phase: p }); },
+
+  async submitGoals(goals) {
+    const s = get();
+    set({ generating: true, goals });
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const intent = engine.buildIntentFromGoals(s.tables, s.relations, goals);
+      const proposal = engine.proposeDashboards(s.tables, s.relations, intent);
+      const proposalEnabled: Record<string, boolean> = {};
+      for (const item of proposal.items) proposalEnabled[item.id] = item.enabled;
+      set({ intent, proposal, proposalEnabled, phase: 'proposal' });
+    } finally {
+      set({ generating: false });
+    }
+  },
+
+  toggleProposalItem(id) {
+    set((s) => ({ proposalEnabled: { ...s.proposalEnabled, [id]: !s.proposalEnabled[id] } }));
+  },
+
+  async approveProposal() {
+    const s = get();
+    if (!s.proposal) return;
+    set({ generating: true });
+    await new Promise((r) => setTimeout(r, 30));
+    try {
+      const enabled = new Set(Object.keys(s.proposalEnabled).filter((k) => s.proposalEnabled[k]));
+      const dashboards = applyProposal(s.proposal, enabled);
+      const insights = engine.generateInsights(s.tables, s.relations, s.proposal.intent);
+      set({
+        dashboards, insights,
+        intent: s.proposal.intent,
+        activeDashboardId: dashboards[0]?.id ?? null,
+        phase: 'ready',
+        proposal: null,
+        tab: 'dashboards',
+      });
+      get().persistSoon();
+    } finally {
+      set({ generating: false });
+    }
+  },
+
+  addGlobalFilterColumn(dashId, ref) {
+    set((s) => ({
+      dashboards: s.dashboards.map((d) =>
+        d.id === dashId &&
+        !d.globalFilterColumns.some((f) => f.tableId === ref.tableId && f.column === ref.column)
+          ? { ...d, globalFilterColumns: [...d.globalFilterColumns, ref] }
+          : d,
+      ),
+    }));
+    get().persistSoon();
+  },
 
   newWorkspace() {
     set({
       wsId: uid('ws'), wsName: 'My analysis', createdAt: new Date().toISOString(),
       sources: [], tables: [], relations: [], intent: undefined, answers: undefined,
-      dashboards: [], insights: [], chat: [], tab: 'data',
+      goals: undefined, dashboards: [], insights: [], chat: [], tab: 'data',
+      phase: 'ready', proposal: null, proposalEnabled: {},
       wizardQuestions: [], wizardStep: 0, activeDashboardId: null, activeFilters: [],
     });
   },
@@ -386,25 +460,41 @@ export const useData = create<DataState>((set, get) => ({
 
   async refreshList() {
     try { set({ workspaceList: await security.listWorkspaces() }); } catch { /* fresh device */ }
+    // cloud list is best-effort and never blocks the local one
+    try {
+      if (security.getCloudSync() && (await security.cloudAvailable())) {
+        set({ cloudList: await security.cloudListWorkspaces() });
+      } else {
+        set({ cloudList: [] });
+      }
+    } catch { set({ cloudList: [] }); }
   },
 
   async loadWorkspaceById(id) {
-    const ws = await security.loadWorkspace(id);
+    let ws = await security.loadWorkspace(id);
+    if (!ws && security.getCloudSync()) {
+      try { ws = await security.cloudLoadWorkspace(id); } catch { /* handled below */ }
+      if (ws) await security.saveWorkspace(ws); // cache the cloud copy locally
+    }
     if (!ws) { useApp.getState().toast('error', 'Could not open that workspace.'); return; }
     set({
       wsId: ws.id, wsName: ws.name, createdAt: ws.createdAt,
       sources: ws.sources, tables: ws.tables, relations: ws.relations,
-      intent: ws.intent, answers: ws.answers,
+      intent: ws.intent, answers: ws.answers, goals: ws.goals,
       dashboards: ws.dashboards, insights: ws.insights, chat: ws.chat,
       activeDashboardId: ws.dashboards[0]?.id ?? null,
       activeFilters: [],
       tab: ws.dashboards.length ? 'dashboards' : 'data',
+      phase: 'ready', proposal: null, proposalEnabled: {},
       wizardQuestions: [], wizardStep: 0,
     });
   },
 
   async deleteWorkspaceById(id) {
     await security.deleteWorkspace(id);
+    if (security.getCloudSync()) {
+      try { await security.cloudDeleteWorkspace(id); } catch { /* cloud copy may not exist */ }
+    }
     await get().refreshList();
   },
 
@@ -414,7 +504,7 @@ export const useData = create<DataState>((set, get) => ({
       id: s.wsId, name: s.wsName, createdAt: s.createdAt,
       updatedAt: new Date().toISOString(),
       sources: s.sources, tables: s.tables, relations: s.relations,
-      intent: s.intent, answers: s.answers,
+      intent: s.intent, answers: s.answers, goals: s.goals,
       dashboards: s.dashboards, insights: s.insights,
       chat: s.chat.slice(-100),
       schemaVersion: 1,
@@ -436,10 +526,18 @@ export const useData = create<DataState>((set, get) => ({
         );
         return;
       }
-      security.saveWorkspace(s.toWorkspace()).then(
+      const ws = s.toWorkspace();
+      security.saveWorkspace(ws).then(
         () => get().refreshList(),
         (e) => useApp.getState().toast('warn', e instanceof Error ? e.message : 'Could not save locally'),
       );
+      // encrypted cloud backup — opt-in, best-effort, never blocks local work
+      const user = useAuth.getState().user;
+      if (user && user.provider !== 'guest' && security.getCloudSync()) {
+        security.cloudAvailable().then((ok) => {
+          if (ok) security.cloudSaveWorkspace(ws).catch(() => { /* retried on next save */ });
+        }).catch(() => { /* offline */ });
+      }
     }, 800);
   },
 }));
@@ -469,7 +567,9 @@ function ingest(sources: DataSource[], tables: DataTable[], warnings: { sourceNa
   });
   const gotData = tables.length > 0;
   if (gotData && !st.intent) {
-    useData.getState().startWizard();
+    // silent by design: everything is read and saved — the next screen asks
+    // human questions only (no columns, no schema)
+    useData.setState({ phase: 'summary' });
   } else if (gotData && st.intent) {
     useData.getState().regenerate();
     toast('success', `Added ${tables.length} table${tables.length > 1 ? 's' : ''} — dashboards refreshed.`);

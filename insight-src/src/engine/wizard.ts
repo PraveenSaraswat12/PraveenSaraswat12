@@ -6,7 +6,7 @@ import type {
 } from '../contracts/types';
 import { categoryQuality } from './profile';
 
-const DOMAIN_HINTS: { re: RegExp; id: string; label: string }[] = [
+export const DOMAIN_HINTS: { re: RegExp; id: string; label: string }[] = [
   { re: /revenue|sales|order|amount|price|gmv|invoice value/i, id: 'sales', label: 'Sales & revenue performance' },
   { re: /invoice|due|payment|outstanding|receivab|payab|credit/i, id: 'receivables', label: 'Receivables & payment aging' },
   { re: /stock|inventory|sku|warehouse|qty on hand|reorder/i, id: 'inventory', label: 'Inventory & stock health' },
@@ -212,7 +212,7 @@ function inferCurrencySymbol(_t: DataTable, _col: string): string | undefined {
   return undefined; // symbols were stripped at parse; UI can set later via settings
 }
 
-function bestDateRef(tables: DataTable[]): ColumnRef | null {
+export function bestDateRef(tables: DataTable[]): ColumnRef | null {
   let best: { ref: ColumnRef; cov: number } | null = null;
   for (const t of tables) {
     for (const p of t.profiles) {
@@ -224,7 +224,7 @@ function bestDateRef(tables: DataTable[]): ColumnRef | null {
   return best?.ref ?? null;
 }
 
-function defaultCategories(tables: DataTable[], n: number): ColumnRef[] {
+export function defaultCategories(tables: DataTable[], n: number): ColumnRef[] {
   const out: { ref: ColumnRef; q: number }[] = [];
   for (const t of tables) {
     for (const p of t.profiles) {
@@ -235,7 +235,7 @@ function defaultCategories(tables: DataTable[], n: number): ColumnRef[] {
   return out.sort((a, b) => b.q - a.q).slice(0, n).map((x) => x.ref);
 }
 
-function defaultKpis(tables: DataTable[], n: number) {
+export function defaultKpis(tables: DataTable[], n: number) {
   const out: { ref: ColumnRef; agg: AggKind; mag: number }[] = [];
   for (const t of tables) {
     for (const p of t.profiles) {

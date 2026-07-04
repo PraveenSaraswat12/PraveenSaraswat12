@@ -265,21 +265,38 @@ function AgingView({
 function TableView({ widget, result }: { widget: WidgetSpec; result: QueryResult }) {
   const { columns, types, rows } = result.table;
   const [sort, setSort] = useState<{ ci: number; dir: 1 | -1 } | null>(null);
+  const [search, setSearch] = useState('');
   const shareCol = columns.indexOf('% of total');
+  const searched = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.some((v) => v !== null && String(v).toLowerCase().includes(q)));
+  }, [rows, search]);
   const sorted = useMemo(() => {
-    if (!sort) return rows;
+    if (!sort) return searched;
     const { ci, dir } = sort;
-    return [...rows].sort((a, b) => {
+    return [...searched].sort((a, b) => {
       const x = a[ci], y = b[ci];
       if (x === null) return 1;
       if (y === null) return -1;
       if (typeof x === 'number' && typeof y === 'number') return dir * (x - y);
       return dir * String(x).localeCompare(String(y));
     });
-  }, [rows, sort]);
+  }, [searched, sort]);
   const maxShare = shareCol >= 0 ? Math.max(...rows.map((r) => Number(r[shareCol] ?? 0)), 1) : 1;
   return (
     <div className="data-table overflow-auto max-h-80 px-1 pb-2">
+      {rows.length > 10 && (
+        <div className="sticky left-0 px-2 pb-2">
+          <input
+            className="w-full max-w-xs rounded-lg bg-ink-800/80 border border-white/10 px-3 py-1.5 text-[11px] text-mist-50 placeholder-mist-500 outline-none focus:border-pulse-500/50"
+            placeholder={`Search ${rows.length.toLocaleString()} rows…`}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search table rows"
+          />
+        </div>
+      )}
       <table className="w-full text-xs">
         <thead className="sticky top-0 z-10">
           <tr className="bg-ink-800/95 backdrop-blur">

@@ -49,7 +49,7 @@ describe('app shell', () => {
   });
 });
 
-describe('full analyst flow (guest → sample → wizard → dashboards → chat)', () => {
+describe('full analyst flow (guest → silent ingest → goals → proposal → dashboards → chat)', () => {
   it('works end to end', async () => {
     render(<App />);
 
@@ -64,20 +64,41 @@ describe('full analyst flow (guest → sample → wizard → dashboards → chat
     const data = useData.getState();
     expect(data.tables.length).toBe(2);
     expect(data.relations.length).toBeGreaterThan(0); // orders ↔ customers linked
-    expect(data.tab).toBe('wizard'); // clarifying questions auto-start
-    expect(data.wizardQuestions.length).toBeGreaterThanOrEqual(4);
 
-    // the wizard asks about goal, dates/aging, filters, KPIs — answer with defaults
-    await waitFor(() => expect(screen.getByText(data.wizardQuestions[0].text)).toBeInTheDocument());
-    const answers: Record<string, string[]> = {};
-    for (const q of useData.getState().wizardQuestions) {
-      if (q.defaultAnswer) answers[q.id] = q.defaultAnswer;
-    }
-    await useData.getState().applyWizard(answers);
+    // SILENT ingest: no questions asked — a friendly summary instead
+    expect(data.phase).toBe('summary');
+    expect(data.wizardQuestions.length).toBe(0);
+    await waitFor(() => expect(screen.getByText(/Read everything/i)).toBeInTheDocument());
+
+    // human questions: chips come from the actual data, no schema words
+    const chips = (await import('../../engine')).engine.suggestGoalChips(data.tables, data.relations);
+    expect(chips.learn.length).toBeGreaterThan(0);
+    expect(chips.learn.join(' ')).not.toMatch(/column|tableId/i);
+
+    // answer in plain language → proposal appears
+    await useData.getState().submitGoals({
+      learn: 'Sales & revenue performance',
+      decide: 'Follow up overdue payments',
+    });
+    const withProposal = useData.getState();
+    expect(withProposal.phase).toBe('proposal');
+    expect(withProposal.proposal).toBeTruthy();
+    const items = withProposal.proposal!.items;
+    expect(items.length).toBeGreaterThanOrEqual(6);
+    expect(items.every((i) => i.reason.length > 10)).toBe(true);
+    expect(items.some((i) => i.kind === 'filter')).toBe(true); // multiple filters proposed
+    expect(withProposal.proposal!.intent.agingBuckets).toEqual([30, 60, 90]); // mapped from words
+
+    // untick one widget, then approve → dashboards built without it
+    const dropped = items.find((i) => i.kind === 'widget')!;
+    useData.getState().toggleProposalItem(dropped.id);
+    await useData.getState().approveProposal();
 
     const after = useData.getState();
+    expect(after.phase).toBe('ready');
     expect(after.intent).toBeTruthy();
     expect(after.dashboards.length).toBeGreaterThanOrEqual(2); // overview + tables
+    expect(after.dashboards.flatMap((d) => d.widgets).some((w) => w.id === dropped.id)).toBe(false);
     expect(after.insights.length).toBeGreaterThan(0);
     expect(after.tab).toBe('dashboards');
 

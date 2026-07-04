@@ -1,9 +1,9 @@
 // Settings: account, plan & usage, privacy & consent, encrypted backups.
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { billing } from '../billing';
 import { security } from '../security';
 import { Badge, Button, Card, Field, inputCls, Modal, Progress } from '../ui/components';
-import { DownloadIcon, ShieldIcon, UserIcon } from '../ui/icons';
+import { DownloadIcon, GlobeIcon, ShieldIcon, UserIcon } from '../ui/icons';
 import { TopNav } from './Landing';
 import { useApp, useAuth, useData } from '../ui/state/stores';
 
@@ -17,6 +17,8 @@ export default function Settings() {
   const data = useData();
 
   const [consent, setConsent] = useState(security.getCloudConsent());
+  const [sync, setSync] = useState(security.getCloudSync());
+  const [cloudReady, setCloudReady] = useState<boolean | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [pass, setPass] = useState('');
@@ -25,6 +27,16 @@ export default function Settings() {
 
   const planDef = billing.plan(plan);
   const usage = billing.usageToday();
+
+  useEffect(() => {
+    let alive = true;
+    if (user && user.provider !== 'guest') {
+      security.cloudAvailable().then((ok) => { if (alive) setCloudReady(ok); }).catch(() => { if (alive) setCloudReady(false); });
+    } else {
+      setCloudReady(false);
+    }
+    return () => { alive = false; };
+  }, [user]);
 
   const doExport = async () => {
     setBusy(true);
@@ -141,6 +153,63 @@ export default function Settings() {
           <div className="mt-5 pt-4 border-t border-white/5">
             <Button variant="danger" onClick={eraseAll}>Erase all local data</Button>
           </div>
+        </Card>
+
+        {/* cloud sync */}
+        <Card className="p-6">
+          <h2 className="font-display text-mist-50 text-sm flex items-center gap-2"><GlobeIcon size={16} /> Cloud backup</h2>
+          <p className="text-xs text-mist-400 mt-2">
+            Keeps an encrypted copy of your workspaces in your Kithra cloud, so you can open
+            them from any device you sign in on. Data is sealed on this device before upload.
+          </p>
+          {user.provider === 'guest' ? (
+            <p className="text-[11px] text-amberx-400 mt-3">Sign in with Google or phone to use cloud backup.</p>
+          ) : cloudReady === false ? (
+            <p className="text-[11px] text-amberx-400 mt-3">
+              One-time setup needed: run <code className="text-mist-300">setup/supabase.sql</code> in your
+              Supabase SQL editor (2 minutes, instructions in the User Guide), then reload.
+            </p>
+          ) : (
+            <label className="flex items-start gap-3 mt-4 cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-[#3a6df4] w-4 h-4"
+                checked={sync}
+                disabled={cloudReady === null}
+                onChange={(e) => {
+                  security.setCloudSync(e.target.checked);
+                  setSync(e.target.checked);
+                  if (e.target.checked) {
+                    data.persistSoon();
+                    toast('success', 'Cloud backup is on — workspaces will sync as you work.');
+                  }
+                }}
+              />
+              <span className="text-xs text-mist-300">
+                Back up my workspaces to my Kithra cloud (encrypted).{' '}
+                <span className="text-mist-500">Off by default. Not zero-knowledge — protected by your account; a passphrase mode is planned.</span>
+              </span>
+            </label>
+          )}
+          {sync && cloudReady && (
+            <div className="mt-4 pt-3 border-t border-white/5">
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  const ok = await askConfirm(
+                    'Delete all cloud backups?',
+                    'Every workspace copy stored in your Kithra cloud will be permanently deleted. Local copies on this device are kept.',
+                    'Delete cloud copies', true,
+                  );
+                  if (!ok) return;
+                  try { await security.cloudDeleteAll(); toast('success', 'Cloud copies deleted.'); await data.refreshList(); }
+                  catch (e) { toast('error', e instanceof Error ? e.message : 'Could not delete'); }
+                }}
+              >
+                Delete all cloud backups
+              </Button>
+            </div>
+          )}
         </Card>
 
         {/* backups */}

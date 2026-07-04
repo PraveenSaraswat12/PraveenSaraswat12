@@ -108,10 +108,17 @@ export function DashboardsPanel() {
       <EmptyState
         icon={<GridIcon />}
         title="No dashboards yet"
-        body="Add data and answer the short questionnaire — Insight designs the dashboards for you."
+        body="Add data, tell Insight what you need in plain words, approve the plan — done."
         action={
-          <Button onClick={() => data.setTab(data.tables.length ? 'wizard' : 'data')}>
-            <WandIcon size={16} /> {data.tables.length ? 'Answer questions' : 'Add data first'}
+          <Button
+            onClick={() =>
+              data.tables.length
+                ? data.intent ? data.setTab('wizard') : data.setPhase('goals')
+                : data.setTab('data')
+            }
+          >
+            <WandIcon size={16} />{' '}
+            {data.tables.length ? (data.intent ? 'Refine' : 'Tell me what you need') : 'Add data first'}
           </Button>
         }
       />
@@ -161,6 +168,7 @@ export function DashboardsPanel() {
 
 function FilterBar({ dash }: { dash: DashboardSpec }) {
   const data = useData();
+  const [customRange, setCustomRange] = useState(false);
   const quickDates: [string, number | null][] = [['All time', null], ['Last 30 days', 30], ['Last 90 days', 90], ['This year', 365]];
 
   const filterDefs = dash.globalFilterColumns
@@ -171,7 +179,18 @@ function FilterBar({ dash }: { dash: DashboardSpec }) {
     })
     .filter((x): x is NonNullable<typeof x> => !!x);
 
-  if (!filterDefs.length && !dash.dateColumn) return null;
+  // every other category column on this dashboard's tables can become a filter
+  const addable = dash.tableIds
+    .flatMap((tid) => {
+      const t = data.tables.find((x) => x.id === tid);
+      return (t?.profiles ?? [])
+        .filter((p) => p.isCategory)
+        .map((p) => ({ tableId: tid, column: p.name }));
+    })
+    .filter((ref) =>
+      !dash.globalFilterColumns.some((f) => f.tableId === ref.tableId && f.column === ref.column));
+
+  if (!filterDefs.length && !dash.dateColumn && !addable.length) return null;
 
   return (
     <div className="glass rounded-xl2 px-3.5 py-2.5 flex items-center gap-2 flex-wrap text-xs">
@@ -203,15 +222,21 @@ function FilterBar({ dash }: { dash: DashboardSpec }) {
         <select
           aria-label="Date range"
           className="bg-ink-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-mist-300 outline-none focus:border-pulse-500/50"
-          value={(() => {
+          value={customRange ? 'custom' : (() => {
             const f = data.activeFilters.find((x) => x.ref.column === dash.dateColumn!.column && x.filter.op === 'gte');
             return f ? String(f.label.split('·')[1] ?? '') : '';
           })()}
           onChange={(e) => {
-            const days = e.target.value ? Number(e.target.value) : null;
             const col = dash.dateColumn!;
-            const idx = data.activeFilters.findIndex((x) => x.ref.column === col.column && x.filter.op === 'gte');
-            if (idx >= 0) data.removeFilter(idx);
+            const clear = () => {
+              const idx = data.activeFilters.findIndex(
+                (x) => x.ref.column === col.column && (x.filter.op === 'gte' || x.filter.op === 'between'));
+              if (idx >= 0) data.removeFilter(idx);
+            };
+            if (e.target.value === 'custom') { clear(); setCustomRange(true); return; }
+            setCustomRange(false);
+            const days = e.target.value ? Number(e.target.value) : null;
+            clear();
             if (days) {
               const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
               data.setFilter({
@@ -222,6 +247,37 @@ function FilterBar({ dash }: { dash: DashboardSpec }) {
           }}
         >
           {quickDates.map(([label, d]) => <option key={label} value={d ?? ''}>{label}</option>)}
+          <option value="custom">Custom dates…</option>
+        </select>
+      )}
+      {dash.dateColumn && customRange && (
+        <CustomDateRange
+          onApply={(from, to) => {
+            const col = dash.dateColumn!;
+            data.setFilter({
+              ref: col,
+              filter: { column: col.column, op: 'between', value: [from, to] },
+              label: `${from} → ${to}`,
+            });
+          }}
+        />
+      )}
+      {addable.length > 0 && (
+        <select
+          aria-label="Add a filter"
+          className="bg-ink-800 border border-dashed border-white/15 rounded-lg px-2.5 py-1.5 text-mist-500 outline-none focus:border-pulse-500/50"
+          value=""
+          onChange={(e) => {
+            const [tableId, column] = e.target.value.split('¦');
+            if (tableId && column) data.addGlobalFilterColumn(dash.id, { tableId, column });
+          }}
+        >
+          <option value="">＋ Add filter</option>
+          {addable.map((r) => (
+            <option key={`${r.tableId}¦${r.column}`} value={`${r.tableId}¦${r.column}`}>
+              {titleCase(r.column)}
+            </option>
+          ))}
         </select>
       )}
       {data.activeFilters.map((f, i) => (
@@ -237,6 +293,22 @@ function FilterBar({ dash }: { dash: DashboardSpec }) {
         <button onClick={data.clearFilters} className="text-mist-500 hover:text-mist-200 ml-auto">Clear all</button>
       )}
     </div>
+  );
+}
+
+function CustomDateRange({ onApply }: { onApply: (from: string, to: string) => void }) {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const cls = 'bg-ink-800 border border-white/10 rounded-lg px-2 py-1 text-mist-300 outline-none focus:border-pulse-500/50 [color-scheme:dark]';
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <input type="date" aria-label="From date" className={cls} value={from} onChange={(e) => setFrom(e.target.value)} />
+      <span className="text-mist-600">→</span>
+      <input type="date" aria-label="To date" className={cls} value={to} onChange={(e) => setTo(e.target.value)} />
+      <Button variant="soft" className="!px-2.5 !py-1 text-[11px]" disabled={!from || !to || from > to} onClick={() => onApply(from, to)}>
+        Apply
+      </Button>
+    </span>
   );
 }
 
