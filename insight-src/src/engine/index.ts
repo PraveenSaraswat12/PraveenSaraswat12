@@ -1,21 +1,27 @@
-// STUB — Agent 1 (Core Logic) replaces this with the full implementation.
-// Must keep exporting: export const engine: InsightEngine
+// Kithra Insight engine — pure data logic behind the whole product.
 import type { InsightEngine } from '../contracts/modules';
+import { parseFiles } from './io/files';
+import { parseWebUrl } from './io/web';
+import { detectRelations } from './relations';
+import { buildIntent, buildWizard } from './wizard';
+import { buildDashboards } from './dashboards';
+import { generateInsights } from './insights';
+import { runQuery } from './query';
+import { answer, describeDataForAI } from './nl';
 
 export const engine: InsightEngine = {
-  async parseFiles() { return { sources: [], tables: [], warnings: [] }; },
-  async parseWebUrl() { return { sources: [], tables: [], warnings: [] }; },
-  detectRelations() { return []; },
-  buildWizard() { return []; },
-  buildIntent() { return { goal: '', filterColumns: [], kpis: [] }; },
-  buildDashboards() { return []; },
-  runQuery(q) {
-    return {
-      table: { columns: [], types: [], rows: [] },
-      meta: { tableId: q.tableId, appliedFilters: [], ms: 0, rowsScanned: 0 },
-    };
-  },
-  generateInsights() { return []; },
-  async answer() { return { text: 'Engine not ready yet.', attachments: [], lowConfidence: true }; },
-  describeDataForAI() { return ''; },
+  parseFiles,
+  parseWebUrl,
+  detectRelations,
+  buildWizard,
+  buildIntent,
+  buildDashboards,
+  runQuery,
+  generateInsights,
+  answer,
+  describeDataForAI,
 };
+
+// formatting helpers shared with the UI
+export { fmtNum, round, titleCase, todayISO, uid } from './util';
+export { agingBucketLabels } from './query';
