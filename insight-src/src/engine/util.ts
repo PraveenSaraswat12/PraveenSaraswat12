@@ -71,7 +71,7 @@ export function parseDateLoose(v: Cell, dayFirst = true): DateParse | null {
   }
 
   // 5-Mar-2024 / 05 Mar 24 / Mar 5, 2024 / 5 March 2024
-  m = /^(\d{1,2})[ -]([A-Za-z]{3,9})[ -,]+(\d{2,4})$/.exec(s);
+  m = /^(\d{1,2})[ -]([A-Za-z]{3,9})[ ,-]+(\d{2,4})$/.exec(s);
   if (m) {
     const mo = MONTHS[m[2].slice(0, 3).toLowerCase()];
     if (mo === undefined) return null;

@@ -2,10 +2,15 @@
 import type {
   AnalysisIntent, ColumnRef, DashboardSpec, DataTable, Relation, WidgetSpec,
 } from '../contracts/types';
+import { categoryQuality } from './profile';
 import { titleCase, uid } from './util';
 
 function metricsOf(t: DataTable) { return t.profiles.filter((p) => p.isMetric); }
-function categoriesOf(t: DataTable) { return t.profiles.filter((p) => p.isCategory); }
+function categoriesOf(t: DataTable) {
+  return t.profiles
+    .filter((p) => p.isCategory)
+    .sort((a, b) => categoryQuality(b, t.rowCount) - categoryQuality(a, t.rowCount));
+}
 function datesOf(t: DataTable) { return t.profiles.filter((p) => p.isDate); }
 
 function primaryMetric(t: DataTable, intent: AnalysisIntent): string | null {

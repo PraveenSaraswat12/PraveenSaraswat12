@@ -286,10 +286,12 @@ export async function answer(question: string, ctx: AnswerContext): Promise<Engi
 
     // ── versus comparison ──
     if (versus && metric) {
+      // value filters on the compared column would cancel the comparison — drop them
+      const vsFilters = filters.filter((f) => f.column.toLowerCase() !== versus.column.toLowerCase());
       const w = widgetFor('bar', `${titleCase(metric)}: ${titleCase(versus.a)} vs ${titleCase(versus.b)}`, `grouped by ${versus.column}${suffix}`, {
         tableId: t.id, metrics: [{ column: metric, agg: agg && agg !== 'count' ? agg : 'sum' }],
         groupBy: [versus.column],
-        filters: [...filters, { column: versus.column, op: 'in', value: [versus.a, versus.b] }],
+        filters: [...vsFilters, { column: versus.column, op: 'in', value: [versus.a, versus.b] }],
         withShare: true,
       }, currency);
       const a = attach(w);

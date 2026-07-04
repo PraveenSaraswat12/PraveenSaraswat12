@@ -34,7 +34,7 @@ if (proto && !proto.__patched2d) {
         if (key === 'canvas') return this;
         if (key === 'measureText') return () => ({ width: 0 });
         if (key === 'createLinearGradient' || key === 'createRadialGradient')
-          return () => ({ addColorStop: noop });
+          return () => ({ addColorStop: noop, toString: () => '[object CanvasGradient]' });
         if (key === 'getImageData') return () => ({ data: [] });
         return noop;
       },

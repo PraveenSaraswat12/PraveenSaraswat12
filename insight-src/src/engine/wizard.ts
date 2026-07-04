@@ -4,6 +4,7 @@ import type {
   AggKind, AnalysisIntent, ColumnRef, DataTable, Relation,
   WizardAnswers, WizardOption, WizardQuestion,
 } from '../contracts/types';
+import { categoryQuality } from './profile';
 
 const DOMAIN_HINTS: { re: RegExp; id: string; label: string }[] = [
   { re: /revenue|sales|order|amount|price|gmv|invoice value/i, id: 'sales', label: 'Sales & revenue performance' },
@@ -84,31 +85,25 @@ export function buildWizard(tables: DataTable[], _relations: Relation[]): Wizard
     });
   }
 
-  // 3 · filters
-  const catOpts: WizardOption[] = [];
+  // 3 · filters — ranked by how good a human dimension each column is
+  const catRanked: { opt: WizardOption; q: number }[] = [];
   for (const t of tables) {
     for (const p of t.profiles) {
       if (!p.isCategory) continue;
-      catOpts.push({
-        id: refId(t.id, p.name),
-        label: multiTable ? `${p.name} — ${t.name}` : p.name,
-        hint: (p.topValues ?? []).slice(0, 3).map((v) => v.value).join(' · '),
+      catRanked.push({
+        opt: {
+          id: refId(t.id, p.name),
+          label: multiTable ? `${p.name} — ${t.name}` : p.name,
+          hint: (p.topValues ?? []).slice(0, 3).map((v) => v.value).join(' · '),
+        },
+        q: categoryQuality(p, t.rowCount),
       });
     }
   }
+  catRanked.sort((a, b) => b.q - a.q);
+  const catOpts: WizardOption[] = catRanked.map((x) => x.opt);
   if (catOpts.length) {
-    const defaults = [...catOpts]
-      .map((o) => {
-        const ref = decodeRef(o.id)!;
-        const t = tables.find((x) => x.id === ref.tableId)!;
-        const p = t.profiles.find((x) => x.name === ref.column)!;
-        const quality = (p.nonNullCount / Math.max(1, t.rowCount)) *
-          (p.uniqueCount >= 2 && p.uniqueCount <= 20 ? 1 : 0.4);
-        return { id: o.id, quality };
-      })
-      .sort((a, b) => b.quality - a.quality)
-      .slice(0, 3)
-      .map((x) => x.id);
+    const defaults = catOpts.slice(0, 3).map((x) => x.id);
     qs.push({
       id: 'filters',
       text: 'Which fields do you want as dashboard filters?',
@@ -234,10 +229,7 @@ function defaultCategories(tables: DataTable[], n: number): ColumnRef[] {
   for (const t of tables) {
     for (const p of t.profiles) {
       if (!p.isCategory) continue;
-      out.push({
-        ref: { tableId: t.id, column: p.name },
-        q: (p.nonNullCount / Math.max(1, t.rowCount)) * (p.uniqueCount <= 20 ? 1 : 0.4),
-      });
+      out.push({ ref: { tableId: t.id, column: p.name }, q: categoryQuality(p, t.rowCount) });
     }
   }
   return out.sort((a, b) => b.q - a.q).slice(0, n).map((x) => x.ref);

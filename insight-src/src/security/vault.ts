@@ -1,4 +1,5 @@
 // Encryption at rest: AES-256-GCM with a per-device key, PBKDF2 for backups.
+import { readFileText } from '../engine/io/read';
 
 const DK_KEY = 'kithra_insight_dk';
 
@@ -85,7 +86,7 @@ export async function sealWithPassphrase(obj: unknown, passphrase: string): Prom
 }
 
 export async function openWithPassphrase<T = unknown>(file: File | Blob, passphrase: string): Promise<T> {
-  const text = await file.text();
+  const text = await readFileText(file);
   const nl = text.indexOf('\n');
   if (nl < 0 || text.slice(0, nl).trim() !== MAGIC) {
     throw new Error('This is not a Kithra Insight backup file.');

@@ -3,6 +3,7 @@ import type {
   AnalysisIntent, DataTable, Insight, Relation, WidgetSpec,
 } from '../contracts/types';
 import type { EngineContext } from '../contracts/modules';
+import { categoryQuality } from './profile';
 import { runQuery, truncateDate } from './query';
 import { fmtNum, round, titleCase, uid } from './util';
 
@@ -23,7 +24,9 @@ export function generateInsights(
       : t.profiles.find((p) => p.isDate)?.name;
     const cat = intent?.compareBy?.tableId === t.id
       ? intent.compareBy.column
-      : t.profiles.find((p) => p.isCategory)?.name;
+      : [...t.profiles]
+          .filter((p) => p.isCategory)
+          .sort((a, b) => categoryQuality(b, t.rowCount) - categoryQuality(a, t.rowCount))[0]?.name;
     const cur = intent?.currency;
 
     if (pm && dc) trend(out, ctx, t.id, t.name, pm, dc, cur);

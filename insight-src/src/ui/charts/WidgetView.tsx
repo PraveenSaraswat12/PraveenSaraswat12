@@ -81,7 +81,7 @@ function ChartView({
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 350 },
+        animation: import.meta.env.MODE === 'test' ? false : { duration: 350 },
         onClick: (_e: unknown, els: { index: number }[]) => {
           if (!onSlice || !widget.drillFilterColumn || !els.length) return;
           const i = els[0].index;

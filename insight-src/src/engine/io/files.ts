@@ -7,6 +7,7 @@ import type {
 import { gridToTable, isNullish, profileTable } from '../profile';
 import { uid } from '../util';
 import { loadPdfJs } from './cdn';
+import { readFileArrayBuffer, readFileText } from './read';
 
 const TEXT_CAP = 20000;
 
@@ -60,7 +61,7 @@ async function parseOne(f: File): Promise<ParseOutcome> {
 // ── Excel ────────────────────────────────────────────────────────────────────
 
 async function parseExcel(f: File): Promise<ParseOutcome> {
-  const buf = await f.arrayBuffer();
+  const buf = await readFileArrayBuffer(f);
   const wb = XLSX.read(buf, { type: 'array', cellDates: false });
   const src = mkSource(f.name, 'excel', f.size);
   const tables: DataTable[] = [];
@@ -88,7 +89,7 @@ export function parseCSVText(text: string, name: string, sourceId: string): Data
 }
 
 async function parseCSV(f: File): Promise<ParseOutcome> {
-  const text = await f.text();
+  const text = await readFileText(f);
   const src = mkSource(f.name, 'csv', f.size);
   const t = parseCSVText(text, f.name, src.id);
   if (!t) return { sources: [src], tables: [], warnings: [{ sourceName: f.name, message: 'No rows found.' }] };
@@ -142,7 +143,7 @@ export function jsonToTables(data: unknown, name: string, sourceId: string): Dat
 }
 
 async function parseJSONFile(f: File): Promise<ParseOutcome> {
-  const text = await f.text();
+  const text = await readFileText(f);
   const src = mkSource(f.name, 'json', f.size);
   let data: unknown;
   try { data = JSON.parse(text); } catch {
@@ -252,7 +253,7 @@ function finishSqlCell(s: string): Cell {
 }
 
 async function parseTextLike(f: File): Promise<ParseOutcome> {
-  const text = await f.text();
+  const text = await readFileText(f);
   const e = ext(f.name);
   const kind: SourceKind = CODE_EXT.has(e) ? 'code' : 'text';
   const src = mkSource(f.name, kind, f.size);
@@ -316,7 +317,7 @@ async function parsePDF(f: File): Promise<ParseOutcome> {
   const warnings: ParseWarning[] = [];
   try {
     const pdfjs = await loadPdfJs();
-    const doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
+    const doc = await pdfjs.getDocument({ data: await readFileArrayBuffer(f) }).promise;
     const tables: DataTable[] = [];
     const textAll: string[] = [];
     const maxPages = Math.min(doc.numPages, 50);

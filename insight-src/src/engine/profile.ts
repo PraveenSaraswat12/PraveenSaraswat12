@@ -198,6 +198,18 @@ export function profileTable(columns: string[], rowsIn: Row[]): ProfiledTable {
   return { columns, rows, profiles };
 }
 
+/**
+ * How good a category column is as a human dimension (filters, compare-by,
+ * breakdowns). Penalizes id-like names (customer_id is a key, not a story).
+ */
+export function categoryQuality(p: ColumnProfile, rowCount: number): number {
+  if (!p.isCategory) return 0;
+  const coverage = p.nonNullCount / Math.max(1, rowCount);
+  const idPenalty = ID_NAME_RE.test(p.name) ? 0.2 : 1;
+  const cardBonus = p.uniqueCount >= 2 && p.uniqueCount <= 20 ? 1 : 0.5;
+  return coverage * idPenalty * cardBonus;
+}
+
 function isSequential(nums: number[]): boolean {
   if (nums.length < 5) return false;
   if (!nums.every((n) => Number.isInteger(n))) return false;
