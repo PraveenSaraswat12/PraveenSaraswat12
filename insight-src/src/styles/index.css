@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Kithra Insight design tokens ───────────────────────────────────────────
+   Family look shared with the root Kithra app: deep-space navy, electric
+   blue pulse, cream mist — extended with aura violet + glow teal for the
+   data-studio feel. Agent 2 may extend below this block, not change it. */
+:root {
+  --ink-950: #070912;
+  --ink-900: #0c0e1c;
+  --ink-800: #12152b;
+  --ink-700: #1a1e3a;
+  --mist-50: #f4f1ea;
+  --pulse-500: #3a6df4;
+  --aura-500: #7c4dff;
+  --glow-500: #19c9a6;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background:
+    radial-gradient(1200px 800px at 80% -10%, rgba(124, 77, 255, 0.10), transparent 60%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(58, 109, 244, 0.10), transparent 55%),
+    var(--ink-900);
+  color: var(--mist-50);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: rgba(58, 109, 244, 0.45); }
+
+/* slim scrollbars that match the theme */
+* { scrollbar-width: thin; scrollbar-color: #262b4f transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: #262b4f; border-radius: 99px; }
+*::-webkit-scrollbar-track { background: transparent; }
