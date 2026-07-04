@@ -34,9 +34,11 @@ const SUPABASE_CDN: string = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 export function getSupabase(): Promise<any> {
   if (!clientPromise) {
     const cfg = getConfig();
+    // default auth storage key on purpose: one Kithra sign-in works across
+    // both the root app and Insight (same origin, same Supabase project)
     clientPromise = import(/* @vite-ignore */ SUPABASE_CDN).then((m) =>
       m.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
-        auth: { persistSession: true, storageKey: 'kithra-insight-auth' },
+        auth: { persistSession: true, detectSessionInUrl: true },
       })
     );
   }

@@ -34,3 +34,75 @@ body {
 *::-webkit-scrollbar { width: 8px; height: 8px; }
 *::-webkit-scrollbar-thumb { background: #262b4f; border-radius: 99px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Agent 2 — UI layer (appended below the token block, per charter)
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* glassy translucent panel — the signature Kithra Insight surface */
+.glass {
+  background: rgba(18, 21, 43, 0.6);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.glass-deep {
+  background: rgba(12, 14, 28, 0.78);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* numbers line up everywhere */
+.num { font-variant-numeric: tabular-nums; }
+
+/* accessible focus everywhere (pulse ring) */
+:focus-visible { outline: 2px solid rgba(58, 109, 244, 0.85); outline-offset: 2px; }
+
+/* tables stay selectable */
+.data-table, .data-table * { user-select: text; }
+
+/* hide horizontal scrollbar on chip rows */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* hide number-input spinners */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type='number'] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ── motion (all wrapped for prefers-reduced-motion below) ─────────────────── */
+@keyframes ki-rise { from { transform: scaleY(0.06); opacity: 0.35; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes ki-fade-up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes ki-shimmer { 0% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+@keyframes ki-dot { 0%, 80%, 100% { transform: translateY(0); opacity: 0.35; } 40% { transform: translateY(-4px); opacity: 1; } }
+@keyframes ki-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+@keyframes ki-pop { from { opacity: 0; transform: translateY(6px) scale(0.98); } to { opacity: 1; transform: none; } }
+
+.anim-rise { animation: ki-rise 1s cubic-bezier(0.2, 0.7, 0.3, 1) both; transform-origin: bottom; }
+.anim-fade-up { animation: ki-fade-up 0.55s ease both; }
+.anim-pop { animation: ki-pop 0.22s ease both; }
+.anim-float { animation: ki-float 8s ease-in-out infinite; }
+
+.shimmer {
+  background: linear-gradient(100deg, rgba(255,255,255,0.045) 30%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.045) 70%);
+  background-size: 220% 100%;
+  animation: ki-shimmer 1.6s linear infinite;
+}
+
+.typing-dot { animation: ki-dot 1.2s ease-in-out infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+/* hero mock-dashboard bars */
+.hero-bar { animation: ki-rise 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) both; transform-origin: bottom; }
+.hero-bar:nth-child(2) { animation-delay: 0.08s; } .hero-bar:nth-child(3) { animation-delay: 0.16s; }
+.hero-bar:nth-child(4) { animation-delay: 0.24s; } .hero-bar:nth-child(5) { animation-delay: 0.32s; }
+.hero-bar:nth-child(6) { animation-delay: 0.4s; }  .hero-bar:nth-child(7) { animation-delay: 0.48s; }
+.hero-bar:nth-child(8) { animation-delay: 0.56s; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .anim-rise, .anim-fade-up, .anim-pop, .anim-float, .shimmer, .typing-dot, .hero-bar { animation: none !important; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
