@@ -8,10 +8,12 @@ npm install
 npm run dev        # local dev server
 npm run typecheck  # strict TS
 npm test           # vitest (engine, security, billing, full-app integration)
-npm run build      # emits ../insight/index.html (single self-contained file)
+npm run build      # emits ../public/insight/index.html (single self-contained file)
 ```
 
-Deploy = commit `../insight/index.html` to the Pages-serving branch and push.
+Deploy = rebuild, commit, and merge to `main` — the "Deploy Kithra to
+GitHub Pages" workflow publishes the site (including `public/insight/`)
+automatically on every push to main.
 
 ## Layout
 

@@ -45,17 +45,17 @@ switch consent ON in Settings.
 
 ## Updating the app (for you, the owner)
 
-The app deploys from the GitHub branch `claude/focused-albattani-uyb66y`:
-anything committed to `insight/index.html` there is live within a minute.
-The full source code lives in `insight-src/` — any future Claude Code
-session can keep building from it:
+The website deploys automatically whenever changes land on the `main`
+branch (a GitHub workflow builds and publishes it — Insight ships inside
+`public/insight/`). The full source code lives in `insight-src/` — any
+future Claude Code session can keep building from it:
 
 ```
 cd insight-src
 npm install        # once
 npm run dev        # local preview
-npm test           # 67 automated tests
-npm run build      # produces insight/index.html → commit & push = deploy
+npm test           # 68 automated tests
+npm run build      # produces public/insight/index.html → merge to main = live
 ```
 
 ## Two optional one-time setups (5 minutes, only if you want them)
