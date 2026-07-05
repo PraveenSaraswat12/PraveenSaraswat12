@@ -27,19 +27,19 @@ This is **idempotent** (safe to re-run). It creates/ensures:
 Two Edge Functions live in [`cloud/functions/`](cloud/functions/). **Both files
 deliberately use no backtick template literals**, so they survive copy/paste.
 
-### 2a. `ai`  — text answers + audio transcription (Groq)
-Deploy [`cloud/functions/ai/index.ts`](cloud/functions/ai/index.ts). It uses
-**Groq** — Llama 3.3 70B for text and **Whisper-large-v3-turbo for transcription**
-— which is fast and has a generous free tier. THIS is what powers the
-"Kithra AI" transcription on the Analyze page.
+### 2a. `ai`  — text answers + audio transcription (Groq → Gemini failover)
+Deploy [`cloud/functions/ai/index.ts`](cloud/functions/ai/index.ts). It tries
+**Groq** first (Llama 3.3 70B text, Whisper-large-v3-turbo transcription) and
+**automatically falls back to Google Gemini** (text + multimodal transcription)
+if Groq errors, rate-limits, or is down. One provider outage can no longer take
+out AI answers or "Kithra AI" transcription.
 
 - **Dashboard path:** Edge Functions → `ai` → paste the file → Deploy.
 - **CLI path:** `supabase functions deploy ai`
-- Secret (**required**): `GROQ_API_KEY` = your key from **console.groq.com** (free).
-  Set it in Edge Functions → Secrets, or `supabase secrets set GROQ_API_KEY=<key>`.
-- Note: the old function used Google/Gemini (`GOOGLE_AI_API_KEY`). The current
-  code is Groq — you must deploy this file **and** set `GROQ_API_KEY`, or cloud
-  transcription returns "GROQ_API_KEY is not set on the server".
+- Secrets (either or **both** — both are already set on this project):
+  - `GROQ_API_KEY` = key from **console.groq.com** (free)
+  - `GOOGLE_AI_API_KEY` = key from **aistudio.google.com** (free)
+- Optional overrides: `GROQ_TEXT_MODEL`, `GROQ_WHISPER_MODEL`, `GEMINI_MODEL`.
 
 ### 2b. `payments` — Razorpay checkout (new)
 Deploy [`cloud/functions/payments/index.ts`](cloud/functions/payments/index.ts).

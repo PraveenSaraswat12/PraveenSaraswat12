@@ -131,6 +131,7 @@ function MoreSheet({ open, onClose }) {
 
   // secondary destinations (everything not on the primary tab bar)
   const dests = [
+    { id:'patterns', ic:'trend',  label:'Patterns',       sub:'Trends across your conversations' },
     { id:'books',    ic:'book',   label:'Books',          sub:'Knowledge that grounds insights' },
     { id:'analyze',  ic:'mic',    label:'Analyze audio',  sub:'Transcribe & break down a clip' },
     { id:'sources',  ic:'upload', label:'Sources',        sub:'Connect & import conversations' },
@@ -206,23 +207,25 @@ function MoreSheet({ open, onClose }) {
    MobileTabBar — fixed, thumb-reachable primary nav
    ============================================================ */
 export function MobileTabBar() {
-  const { route, go } = useApp();
+  const { route, go, openCapture, capture } = useApp();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
-  // primary destinations (4) + More. These are the app's main surfaces.
+  // primary destinations + the center Live action + More. Live is the app's
+  // flagship action, so it gets its own always-visible tab (Patterns moved to
+  // the More sheet to make room).
   const tabs = [
     { id:'dashboard', ic:'grid',   label:'Home' },
     { id:'ask',       ic:'chat',   label:'Ask' },
-    { id:'patterns',  ic:'trend',  label:'Patterns' },
+    { id:'live',      ic:'mic',    label:'Live', live:true },
     { id:'library',   ic:'layers', label:'Recordings' },
   ];
   // routes that live INSIDE the More sheet — keep More lit when on one of them
-  const moreRoutes = ['books', 'analyze', 'sources', 'privacy', 'pricing'];
+  const moreRoutes = ['books', 'analyze', 'sources', 'privacy', 'pricing', 'patterns'];
   const moreActive = moreOpen || moreRoutes.includes(route);
 
-  const Tab = ({ id, ic, label, active, onClick }) => (
-    <button className={`mtab ${active ? 'active' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>
-      <span className="mtab-ic"><Icon name={ic} size={23} /></span>
+  const Tab = ({ ic, label, active, live, onClick }) => (
+    <button className={`mtab ${live ? 'mtab-live' : ''} ${active ? 'active' : ''}`} onClick={onClick} aria-current={active ? 'page' : undefined}>
+      <span className="mtab-ic"><Icon name={ic} size={live ? 21 : 23} /></span>
       <span className="mtab-lbl">{label}</span>
     </button>
   );
@@ -231,7 +234,9 @@ export function MobileTabBar() {
     <>
       <nav className="mtabbar" role="tablist" aria-label="Primary">
         {tabs.map(tb => (
-          <Tab key={tb.id} {...tb} active={route === tb.id && !moreOpen} onClick={() => { setMoreOpen(false); go(tb.id); }} />
+          <Tab key={tb.id} {...tb}
+            active={tb.live ? (capture.open || capture.minimized) : (route === tb.id && !moreOpen)}
+            onClick={() => { setMoreOpen(false); if (tb.live) openCapture('listen'); else go(tb.id); }} />
         ))}
         <Tab id="more" ic="menu" label="More" active={moreActive} onClick={() => setMoreOpen(o => !o)} />
       </nav>
