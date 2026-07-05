@@ -101,6 +101,34 @@ export interface WizardQuestion {
 /** questionId → chosen option ids / column refs ("tableId::column") / free text */
 export type WizardAnswers = Record<string, string[]>;
 
+// ── Conversational goals (the human questions asked AFTER silent ingest) ────
+
+/** free-text answers; chips the user taps are appended into these strings */
+export interface GoalAnswers { learn?: string; decide?: string; custom?: string; }
+
+export interface GoalChips { learn: string[]; decide: string[]; custom: string[]; }
+
+// ── Dashboard proposal (shown for approval BEFORE building) ─────────────────
+
+export interface ProposalItem {
+  id: string;
+  kind: 'widget' | 'filter';
+  dashboardName: string;
+  title: string;
+  /** one-line plain-language reason this item earns its place */
+  reason: string;
+  enabled: boolean;
+  widget?: WidgetSpec;
+  filterRef?: ColumnRef;
+}
+
+export interface DashboardProposal {
+  intent: AnalysisIntent;
+  /** complete pre-built specs; applying the proposal filters these by enabled items */
+  dashboards: DashboardSpec[];
+  items: ProposalItem[];
+}
+
 export type AggKind = 'sum' | 'avg' | 'count' | 'min' | 'max' | 'median' | 'distinct';
 
 export interface ColumnRef { tableId: string; column: string; }
@@ -243,6 +271,7 @@ export interface Workspace {
   relations: Relation[];
   intent?: AnalysisIntent;
   answers?: WizardAnswers;
+  goals?: GoalAnswers;
   dashboards: DashboardSpec[];
   insights: Insight[];
   chat: ChatTurn[];

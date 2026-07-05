@@ -62,6 +62,21 @@ Razorpay, jsDelivr CDN for supabase-js/pdf.js).
 
 No analytics, no ad pixels, no fingerprinting, no third-party trackers.
 
+## Cloud backup of workspaces (optional, off by default)
+
+When the owner has run `setup/supabase.sql` and the user switches on
+**Settings → Cloud backup**, workspaces are also stored in the
+`insight_workspaces` table so they can be opened from any signed-in device.
+
+- Payloads are sealed **on the device** with AES-256-GCM before upload; the
+  database stores ciphertext plus only a name and row counts for listing.
+- The encryption key is derived from the user's account id (PBKDF2). This is
+  **at-rest protection tied to the account, not zero-knowledge** — stated in
+  the app UI. A user-passphrase mode (true zero-knowledge) is on the roadmap.
+- Row-level security restricts every row to its owner.
+- "Delete all cloud backups" in Settings removes every cloud copy; deleting
+  a workspace in the app removes its cloud copy too.
+
 ## Honest limitations & roadmap
 
 - Device-at-rest encryption cannot protect against malware running on the

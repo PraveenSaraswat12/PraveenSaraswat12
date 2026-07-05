@@ -9,10 +9,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type {
-  AnalyticsQuery, AnalysisIntent, ChatTurn, DashboardSpec, DataSource,
-  DataTable, EngineAnswer, Insight, ParseOutcome, PlanDef, PlanId, QueryResult,
-  Relation, SessionUser, Subscription, WizardAnswers, WizardQuestion,
-  Workspace, WorkspaceSummary,
+  AnalyticsQuery, AnalysisIntent, ChatTurn, DashboardProposal, DashboardSpec,
+  DataSource, DataTable, EngineAnswer, GoalAnswers, GoalChips, Insight,
+  ParseOutcome, PlanDef, PlanId, QueryResult, Relation, SessionUser,
+  Subscription, WizardAnswers, WizardQuestion, Workspace, WorkspaceSummary,
 } from './types';
 
 // ── Engine (pure data logic; no React, no persistent state) ─────────────────
@@ -35,9 +35,15 @@ export interface InsightEngine {
   /** fetch a public web page / API url and extract tables + text */
   parseWebUrl(url: string): Promise<ParseOutcome>;
   detectRelations(tables: DataTable[]): Relation[];
-  /** schema-aware clarifying questions (aging date, filters, KPIs, goal …) */
+  /** power-user "Refine" questionnaire (column-level; optional) */
   buildWizard(tables: DataTable[], relations: Relation[]): WizardQuestion[];
   buildIntent(tables: DataTable[], answers: WizardAnswers, questions: WizardQuestion[]): AnalysisIntent;
+  /** tappable suggestions for the three human questions, from the actual data */
+  suggestGoalChips(tables: DataTable[], relations: Relation[]): GoalChips;
+  /** plain-language answers → full intent (columns/dates/aging chosen automatically) */
+  buildIntentFromGoals(tables: DataTable[], relations: Relation[], goals: GoalAnswers): AnalysisIntent;
+  /** the approval plan: what the dashboards WILL contain, with reasons */
+  proposeDashboards(tables: DataTable[], relations: Relation[], intent: AnalysisIntent): DashboardProposal;
   buildDashboards(tables: DataTable[], relations: Relation[], intent: AnalysisIntent): DashboardSpec[];
   runQuery(q: AnalyticsQuery, ctx: EngineContext): QueryResult;
   generateInsights(tables: DataTable[], relations: Relation[], intent?: AnalysisIntent): Insight[];
@@ -75,6 +81,17 @@ export interface SecurityModule {
   /** consent for sending data summaries to cloud AI (per Kithra precedent) */
   getCloudConsent(): boolean;
   setCloudConsent(v: boolean): void;
+
+  /** separate consent: encrypted workspace backup to the Kithra cloud */
+  getCloudSync(): boolean;
+  setCloudSync(v: boolean): void;
+  /** true when signed in AND the insight_workspaces table exists */
+  cloudAvailable(): Promise<boolean>;
+  cloudSaveWorkspace(ws: Workspace): Promise<void>;
+  cloudListWorkspaces(): Promise<WorkspaceSummary[]>;
+  cloudLoadWorkspace(id: string): Promise<Workspace | null>;
+  cloudDeleteWorkspace(id: string): Promise<void>;
+  cloudDeleteAll(): Promise<void>;
 
   /** wipe every locally stored byte (datasets, sessions, counters) */
   eraseAllLocalData(): Promise<void>;

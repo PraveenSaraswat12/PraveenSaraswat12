@@ -4,6 +4,7 @@ import { parseFiles } from './io/files';
 import { parseWebUrl } from './io/web';
 import { detectRelations } from './relations';
 import { buildIntent, buildWizard } from './wizard';
+import { buildIntentFromGoals, proposeDashboards, suggestGoalChips } from './goals';
 import { buildDashboards } from './dashboards';
 import { generateInsights } from './insights';
 import { runQuery } from './query';
@@ -15,6 +16,9 @@ export const engine: InsightEngine = {
   detectRelations,
   buildWizard,
   buildIntent,
+  suggestGoalChips,
+  buildIntentFromGoals,
+  proposeDashboards,
   buildDashboards,
   runQuery,
   generateInsights,
@@ -25,3 +29,4 @@ export const engine: InsightEngine = {
 // formatting helpers shared with the UI
 export { fmtNum, round, titleCase, todayISO, uid } from './util';
 export { agingBucketLabels } from './query';
+export { applyProposal } from './goals';

@@ -4,14 +4,20 @@
 
 ## What it does
 
-1. **Upload anything** — Excel, CSV, PDF, JSON, code files, or paste a link
-   to a web page with tables. Multiple files at once is fine; if files are
-   related (e.g. orders + customers), Insight finds the connection itself.
-2. **It asks you questions** — your goal, which date drives aging, which
-   filters and KPIs matter. Every question explains *why* it's asking.
-3. **Dashboards build themselves** — KPI cards, monthly trends, breakdowns,
-   share donuts, aging buckets (30/60/90 etc.), detail tables. Click any bar
-   or slice and **everything re-filters together**.
+1. **Upload anything — zero questions asked** — Excel, CSV, PDF, JSON, code
+   files, or paste a link. Insight reads 100% of it silently (every sheet,
+   row and column), links related files (orders ↔ customers) and saves it
+   encrypted. You just see: "Read everything. Saved securely."
+2. **Then it asks what YOU need — in plain words** — "What do you want to
+   learn?", "What decision should this help?", "Anything custom you track?"
+   Tap suggestions or type freely; Insight maps your words to the data by
+   itself (columns, dates, aging buckets — even "15/30/45 days" typed in a
+   sentence). Column-level tweaking lives in an optional "Refine" screen.
+3. **It shows you the plan before building** — the exact KPI cards, charts,
+   aging views, tables and filters it proposes, each with a one-line reason.
+   Untick anything, then "Build my dashboards". Click any bar or slice and
+   **everything re-filters together**; add more filters, custom date ranges,
+   and search inside tables anytime.
 4. **Chat with your data** — "Total revenue by region", "Top 10 customers",
    "Aging of outstanding payments", "West vs North", "Forecast next 3
    months" (a Premium tool), "Describe my data". Every number is genuinely
@@ -65,8 +71,11 @@ npm run build      # produces public/insight/index.html → merge to main = live
    `https://praveensaraswat12.github.io/PraveenSaraswat12/insight/` to
    Redirect URLs. (Without it, Google sign-in returns to the root Kithra
    page — you're still signed in to Insight when you go back.)
-2. **Future cloud sync**: Supabase dashboard → SQL editor → paste
-   `setup/supabase.sql` → Run. Harmless now, enables encrypted sync later.
+2. **Cloud backup (open workspaces from any device)**: Supabase dashboard →
+   SQL editor → paste the contents of `setup/supabase.sql` → Run. Then in
+   the app: Settings → Cloud backup → switch it on. Workspaces sync
+   encrypted from then on; a "Delete all cloud backups" button is right
+   there too.
 
 ## If something looks wrong
 

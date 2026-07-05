@@ -1,6 +1,7 @@
 // Security & data module: auth, encrypted persistence, consent, data rights.
 import type { SecurityModule } from '../contracts/modules';
 import * as auth from './auth';
+import * as cloud from './cloudsync';
 import * as store from './store';
 import { __resetVaultForTests } from './vault';
 
@@ -29,6 +30,15 @@ export const security: SecurityModule = {
   setCloudConsent(v: boolean) {
     try { localStorage.setItem(CONSENT_KEY, v ? '1' : '0'); } catch { /* private mode */ }
   },
+
+  getCloudSync: cloud.getCloudSync,
+  setCloudSync: cloud.setCloudSync,
+  cloudAvailable: cloud.cloudAvailable,
+  cloudSaveWorkspace: cloud.cloudSaveWorkspace,
+  cloudListWorkspaces: cloud.cloudListWorkspaces,
+  cloudLoadWorkspace: cloud.cloudLoadWorkspace,
+  cloudDeleteWorkspace: cloud.cloudDeleteWorkspace,
+  cloudDeleteAll: cloud.cloudDeleteAll,
 
   async eraseAllLocalData() {
     await store.deleteDatabase();

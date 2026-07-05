@@ -21,7 +21,7 @@ const SYNONYMS: Record<string, string[]> = {
 
 interface ColMatch { tableId: string; column: string; score: number; }
 
-function columnScore(q: string, col: string): number {
+export function columnScore(q: string, col: string): number {
   const nq = norm(q), nc = norm(col);
   if (!nc) return 0;
   if (nq.includes(nc)) return nc.length >= 4 ? 1 : 0.7;
