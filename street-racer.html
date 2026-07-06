@@ -74,9 +74,15 @@
   .endsub{color:#c9ac83;font-size:15px;margin-bottom:24px;letter-spacing:2px;line-height:1.8;}
   #loadmsg{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;color:#e8b06a;
     font-family:system-ui;letter-spacing:4px;font-size:14px;background:#0a0603;z-index:30;}
+  #btnFS{position:fixed;top:14px;right:14px;z-index:25;cursor:pointer;
+    border:1px solid rgba(200,140,60,.55);background:rgba(20,12,5,.65);color:#ffd98a;
+    padding:7px 14px;font-size:13px;letter-spacing:2px;font-family:'Segoe UI',system-ui,Arial,sans-serif;
+    border-radius:4px;transition:all .15s;}
+  #btnFS:hover{background:rgba(70,40,15,.85);box-shadow:0 0 14px rgba(255,150,40,.3);}
 </style>
 <div id="game"></div>
 <div id="vig"></div><div id="dmgflash"></div>
+<button id="btnFS" title="Toggle fullscreen (F)">⛶ FULLSCREEN</button>
 <div id="loadmsg">BUILDING CITY…</div>
 
 <div id="menu" class="scr hidden">
@@ -85,7 +91,7 @@
   <button class="btn" id="btnPlay">START ENGINE</button>
   <div class="controls">
     <b>W A S D</b> / <b>←↑↓→</b> drive &nbsp; <b>SPACE</b> handbrake &nbsp; <b>SHIFT</b> nitrous<br>
-    <b>C</b> camera &nbsp; <b>R</b> reset to road &nbsp; <b>ESC</b> pause
+    <b>C</b> camera &nbsp; <b>R</b> reset to road &nbsp; <b>F</b> fullscreen &nbsp; <b>ESC</b> pause
   </div>
 </div>
 
@@ -2025,11 +2031,28 @@ const ui={
 /* ============================================================
    INPUT
    ============================================================ */
+/* fullscreen toggle (button + F key) */
+function toggleFS(){
+  const doc=document,el=doc.documentElement;
+  if(doc.fullscreenElement||doc.webkitFullscreenElement){
+    (doc.exitFullscreen||doc.webkitExitFullscreen).call(doc);
+  }else{
+    const req=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(req){const p=req.call(el);if(p&&p.catch)p.catch(()=>{});}
+  }
+}
+$('btnFS').onclick=()=>{toggleFS();$('btnFS').blur();};
+['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>{
+  const on=!!(document.fullscreenElement||document.webkitFullscreenElement);
+  $('btnFS').textContent=on?'⛶ EXIT':'⛶ FULLSCREEN';
+}));
+
 const keys={};
 addEventListener('keydown',e=>{
   if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code))e.preventDefault();
   if(e.repeat)return;
   keys[e.code]=true;
+  if(e.code==='KeyF')toggleFS();
   if(e.code==='KeyC'&&game.state==='play')cam.mode=1-cam.mode;
   if(e.code==='KeyR'&&game.state==='play')game.resetCar();
   if(e.code==='Escape'){
