@@ -74,19 +74,18 @@ function Conversation() {
             </div>
           </div>
 
-          {/* real transcript */}
-          <Panel title="Transcript" sub={clip.transcript ? 'What was actually said' : 'Not transcribed yet'}>
-            {clip.transcript
-              ? <p style={{ margin:0, fontSize:14.5, lineHeight:1.75, whiteSpace:'pre-wrap' }}>{clip.transcript}</p>
-              : (
-                <div className="stack" style={{ gap:12 }}>
-                  <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.55 }}>Transcribe this recording to unlock word-level insights, search, and a sharper AI read.</p>
-                  <button className="btn btn-primary btn-sm" style={{ alignSelf:'flex-start' }} onClick={()=>{ go('analyze'); }}>
-                    <Icon name="file" size={14} />Transcribe on the Analyze page
-                  </button>
-                </div>
-              )}
-          </Panel>
+          {/* real transcript — transcribe RIGHT HERE when the audio is on this device */}
+          {clip.transcript ? (
+            <Panel title="Transcript" sub="What was actually said">
+              <p style={{ margin:0, fontSize:14.5, lineHeight:1.75, whiteSpace:'pre-wrap' }}>{clip.transcript}</p>
+            </Panel>
+          ) : (clip.url && window.TranscriptPanel) ? (
+            React.createElement(window.TranscriptPanel, { clipUrl: clip.url, clipId: clip.id, durSec: clip.durSec })
+          ) : (
+            <Panel title="Transcript" sub="Not transcribed yet">
+              <p className="muted" style={{ margin:0, fontSize:13.5, lineHeight:1.55 }}>This recording’s audio isn’t stored on this device, so it can’t be transcribed here. Open Kithra on the device where you recorded it, or add the audio again via Analyze.</p>
+            </Panel>
+          )}
 
           {/* energy curve */}
           {Array.isArray(a.energy) && a.energy.length>2 && (
