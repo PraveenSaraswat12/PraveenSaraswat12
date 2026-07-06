@@ -60,7 +60,14 @@ async function stop() {
 
 // Fires when the OS / user ends capture from the system UI (not via stop()).
 function onStopped(cb) {
-  try { return SystemAudio.addListener('stopped', cb); } catch (e) { return null; }
+  try {
+    const p = SystemAudio.addListener('stopped', cb);
+    // On web the plugin isn't implemented: addListener returns a REJECTING
+    // promise, not a sync throw. Return a promise that resolves null instead,
+    // so callers can chain .then() without spawning an unhandled rejection.
+    if (p && typeof p.catch === 'function') return p.catch(() => null);
+    return p;
+  } catch (e) { return null; }
 }
 
 const KithraSystemAudio = { isSupported, isRunning, start, stop, onStopped, fileFromPath, _plugin: SystemAudio };

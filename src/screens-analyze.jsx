@@ -913,7 +913,7 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, clipId, planAllows, go 
   );
 }
 
-Object.assign(window, { Analyze });
+Object.assign(window, { Analyze, TranscriptPanel });
 
 
-export { Analyze };
+export { Analyze, TranscriptPanel };
