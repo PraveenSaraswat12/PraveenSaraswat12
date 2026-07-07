@@ -10,5 +10,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    // Split rarely-changing vendor code into its own cached chunks so the app
+    // chunk stays small and repeat visits download less.
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom'],
+          supabase: ['@supabase/supabase-js'],
+        },
+      },
+    },
   },
 });
