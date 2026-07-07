@@ -105,7 +105,7 @@ function Library() {
                 <div className="row" style={{ justifyContent:'space-between', gap:10, marginBottom:10, flexWrap:'wrap' }}>
                   <div className="stack" style={{ gap:3, minWidth:0 }}>
                     <span className="row" style={{ gap:8, minWidth:0 }}>
-                      <span style={{ fontWeight:700, fontSize:14.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.name||'Recording'}</span>
+                      <button className="linkbtn" style={{ fontWeight:700, fontSize:14.5, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textAlign:'left', border:0, background:'transparent', padding:0, cursor:'pointer', color:'inherit' }} onClick={()=>go('conversation',{convo:c.id, from:'library', rec:c})} title="Open this recording — view insights & transcribe">{c.name||'Recording'}</button>
                       {c.transcript ? <Badge kind="good">Transcribed</Badge> : <Badge kind="neutral">Audio only</Badge>}
                     </span>
                     <span className="row wrap" style={{ gap:9 }}>
