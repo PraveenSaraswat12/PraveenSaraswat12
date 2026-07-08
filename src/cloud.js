@@ -111,6 +111,16 @@ const Cloud = {
     const { data } = c.auth.onAuthStateChange((event) => { if (event === 'PASSWORD_RECOVERY') { try { cb(); } catch (e) {} } });
     return () => { try { data.subscription.unsubscribe(); } catch (e) {} };
   },
+  // Fire on every auth session change (OAuth redirect sign-in, token refresh,
+  // sign-out) so the app's login gate updates the moment the session lands —
+  // even if the first check ran before the returned token was parsed.
+  onAuthChange(cb) {
+    try {
+      const c = getClient(); if (!c) return () => {};
+      const { data } = c.auth.onAuthStateChange((event, session) => { try { cb(event, session); } catch (e) {} });
+      return () => { try { data.subscription.unsubscribe(); } catch (e) {} };
+    } catch (e) { return () => {}; }
+  },
 
   // ---- Google sign-in (OAuth redirect) ----
   // Returns to the current URL; Supabase picks the session out of the hash on

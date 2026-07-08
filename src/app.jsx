@@ -149,6 +149,26 @@ function AppProvider() {
     catch (e) { setUser(null); return null; }
   }, []);
   React.useEffect(() => { refreshUser(); }, []);
+  // ----- finish OAuth (Google) redirect sign-in reliably -----
+  // On return from Google, Supabase restores the session from the URL. Subscribe
+  // to that event so the gate clears even if the first check beat the token
+  // parse — and move the user INTO the app instead of stranding them on the
+  // landing/home page (the returned #access_token hash isn't a normal route).
+  React.useEffect(() => {
+    const cameFromOAuth = /access_token=|[?&]code=|error=|error_description=/.test(String(window.location.hash) + String(window.location.search));
+    let unsub = () => {};
+    try {
+      if (window.KithraCloud && window.KithraCloud.onAuthChange) {
+        unsub = window.KithraCloud.onAuthChange(async (event) => {
+          if (event === 'SIGNED_OUT') { setUser(null); return; }
+          const u = await refreshUser();
+          if (u && cameFromOAuth) go('dashboard');
+        });
+      }
+    } catch (e) {}
+    if (cameFromOAuth) refreshUser().then((u) => { if (u) go('dashboard'); });
+    return () => { try { unsub(); } catch (e) {} };
+  }, []);
   // ----- owner all-access -----
   // This specific account gets every feature unlocked, for free, while still
   // signing in normally. The email comes from the authenticated Supabase
