@@ -955,7 +955,7 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, clipId, planAllows, go 
   );
 }
 
-Object.assign(window, { Analyze, TranscriptPanel, transcriptInsights, scoreTone });
+Object.assign(window, { Analyze, TranscriptPanel, transcriptInsights, scoreTone, analyzeAudio });
 
 
-export { Analyze, TranscriptPanel, transcriptInsights, scoreTone };
+export { Analyze, TranscriptPanel, transcriptInsights, scoreTone, analyzeAudio };

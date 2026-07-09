@@ -21,7 +21,7 @@ function lumenContext(mode) {
 }
 
 function LiveCaptureHost() {
-  const { capture, closeCapture, minimizeCapture, expandCapture, setCapMode, mode, voicePrefs, go, clips, books } = useApp();
+  const { capture, closeCapture, minimizeCapture, expandCapture, setCapMode, mode, voicePrefs, go, clips, books, addClip } = useApp();
   const V = window.LumenVoice || {};
   const capMode = capture.capMode || 'listen';
   const ctx = React.useMemo(() => lumenContext(mode), [mode]);
@@ -42,20 +42,142 @@ function LiveCaptureHost() {
   const wantRef = React.useRef(false);
   const busyRef = React.useRef(false);
   const exRef = React.useRef([]); exRef.current = exchanges;
+  const transcriptRef = React.useRef(''); transcriptRef.current = transcript;
+  const secsRef = React.useRef(0); secsRef.current = secs;
   const feedRef = React.useRef(null);
+  // ---- autosave plumbing: a live session is recorded as real audio (not just
+  // a transcript) and checkpointed periodically, so Stop, closing the overlay,
+  // switching mode, or the tab/browser closing mid-capture never loses it ----
+  const streamRef = React.useRef(null);
+  const mediaRecRef = React.useRef(null);
+  const chunksRef = React.useRef([]);
+  const clipIdRef = React.useRef(null);
+  const startedAtRef = React.useRef(0);
+  const lastUrlRef = React.useRef(null);
+  const savingRef = React.useRef(false);
+  const audioGenRef = React.useRef(0);
+  const CHECKPOINT_MS = 12000;
 
   React.useEffect(() => { const el = feedRef.current; if (el) el.scrollTop = el.scrollHeight; }, [exchanges, transcript, interim, thinking]);
-  React.useEffect(() => () => { wantRef.current=false; busyRef.current=false; try{recRef.current&&recRef.current.stop();}catch(e){} V.stopSpeak&&V.stopSpeak(); }, []);
-  React.useEffect(() => { if (!running) return; const id=setInterval(()=>setSecs(s=>s+1),1000); return ()=>clearInterval(id); }, [running]);
   // native (Android) device-audio capture available? → reveal the option
   React.useEffect(() => { let on=true; (async()=>{ try{ const ok=await window.KithraSystemAudio?.isSupported?.(); if(on) setNativeCap(!!ok); }catch(e){} })(); return ()=>{ on=false; }; }, []);
+
+  // ---- real audio recording, alongside the live transcript (best-effort: the
+  // transcript still works even if mic-for-recording is blocked/unsupported) ----
+  // Starts fresh, or RESUMES a merely-paused recorder (pauseAudioRecording,
+  // below) so pausing then resuming keeps recording into the SAME continuous
+  // clip instead of losing everything captured before the pause.
+  const startAudioRecording = () => {
+    try {
+      const existing = mediaRecRef.current;
+      if (existing && existing.state === 'paused') { existing.resume(); return; }
+      if (existing && existing.state === 'recording') return;
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') return;
+      // generation token: a rapid Start→Stop→Start can leave an earlier
+      // getUserMedia() promise resolving AFTER a newer one has already taken
+      // over — without this, the stale resolution would open a second stream
+      // that never gets released (a silently-open mic).
+      const gen = ++audioGenRef.current;
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+        if (!wantRef.current || gen !== audioGenRef.current) { try { stream.getTracks().forEach(t => t.stop()); } catch (e) {} return; }
+        streamRef.current = stream;
+        chunksRef.current = [];
+        const mr = new MediaRecorder(stream);
+        mr.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+        mr.start(3000); // flush a chunk every 3s so periodic checkpoints have fresh audio
+        mediaRecRef.current = mr;
+      }).catch(() => {});
+    } catch (e) {}
+  };
+  // Pauses WITHOUT releasing the mic/recorder, so a later resume can append
+  // more audio to the same clip (used by Stop, which the UI presents as
+  // Pause/Resume). Returns a promise that resolves once requestData()'s flush
+  // has actually landed in chunksRef — that event fires ASYNCHRONOUSLY, so a
+  // caller that reads chunksRef right after calling this WITHOUT awaiting it
+  // would race ahead of the flush and see stale/empty data (concretely: a
+  // session that pauses quickly, before the recorder's own periodic timeslice
+  // would otherwise have flushed anything on its own).
+  const pauseAudioRecording = () => new Promise((resolve) => {
+    try {
+      const mr = mediaRecRef.current;
+      if (!mr || mr.state !== 'recording') { resolve(); return; }
+      const prevHandler = mr.ondataavailable;
+      let done = false;
+      const finish = () => { if (done) return; done = true; mr.ondataavailable = prevHandler; try { mr.pause(); } catch (e) {} resolve(); };
+      mr.ondataavailable = (e) => { if (prevHandler) prevHandler(e); finish(); };
+      try { mr.requestData(); } catch (e) { finish(); return; }
+      setTimeout(finish, 500); // safety net if dataavailable never fires
+    } catch (e) { resolve(); }
+  });
+  // Fully stops and releases the mic — used when the session genuinely ends
+  // (Close, switching mode, another tab taking over), not on a mere pause.
+  const stopAudioRecording = () => new Promise((resolve) => {
+    const mr = mediaRecRef.current;
+    try { streamRef.current && streamRef.current.getTracks().forEach(t => t.stop()); } catch (e) {}
+    streamRef.current = null;
+    if (!mr || mr.state === 'inactive') { mediaRecRef.current = null; resolve(); return; }
+    mr.onstop = () => { mediaRecRef.current = null; resolve(); };
+    try { mr.stop(); } catch (e) { mediaRecRef.current = null; resolve(); }
+  });
+
+  // ---- autosave: upserts (by clipIdRef) the in-progress recording, so Stop,
+  // closing the overlay, switching mode, or the tab closing mid-capture never
+  // loses it. Cheap by default (just persists what's captured so far); pass
+  // finalize:true (only from Stop/Close) to run the full acoustic analysis
+  // once recording is actually done. Accepts explicit overrides so a caller
+  // that's about to wipe state (fullClose) can snapshot values BEFORE the
+  // wipe, instead of racing an async save against the wipe's re-render. ----
+  const saveCheckpoint = React.useCallback(async (opts = {}) => {
+    if (!clipIdRef.current || savingRef.current) return;
+    const text = opts.textOverride != null
+      ? opts.textOverride.trim()
+      : capMode === 'listen'
+        ? transcriptRef.current.trim()
+        : (opts.exchangesOverride || exRef.current).map(e => `${e.role === 'me' ? 'You' : 'Kithra'}: ${e.text}`).join('\n\n');
+    const hasAudio = chunksRef.current.length > 0;
+    if (!hasAudio && !text) return; // nothing worth saving yet
+    savingRef.current = true;
+    try {
+      const mimeType = (mediaRecRef.current && mediaRecRef.current.mimeType) || 'audio/webm';
+      const blob = hasAudio ? new Blob(chunksRef.current, { type: mimeType }) : null;
+      const url = blob ? URL.createObjectURL(blob) : null;
+      if (lastUrlRef.current && lastUrlRef.current !== url) { try { URL.revokeObjectURL(lastUrlRef.current); } catch (e) {} }
+      lastUrlRef.current = url;
+      const durSec = opts.secsOverride != null ? opts.secsOverride : secsRef.current;
+      let patch = {
+        id: clipIdRef.current,
+        name: `${capMode === 'converse' ? 'Live conversation' : 'Live capture'} — ${new Date(startedAtRef.current || Date.now()).toLocaleString()}`,
+        url, durSec, source: 'listen', ts: startedAtRef.current || Date.now(),
+        transcript: text || undefined,
+      };
+      if (opts.finalize && blob && window.analyzeAudio) {
+        try {
+          const res = await window.analyzeAudio(new File([blob], patch.name, { type: mimeType }));
+          patch = { ...patch, durSec: res.duration, peaks: res.peaks, analysis: res };
+        } catch (e) {}
+      }
+      addClip(patch, blob);
+    } finally { savingRef.current = false; }
+  }, [capMode, addClip]);
+
+  // periodic checkpoint while live — caps data loss (crash, killed tab, dead
+  // battery) to at most CHECKPOINT_MS regardless of how the session ends
+  React.useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => { saveCheckpoint(); }, CHECKPOINT_MS);
+    return () => clearInterval(id);
+  }, [running, saveCheckpoint]);
+
+  React.useEffect(() => () => { wantRef.current=false; busyRef.current=false; try{recRef.current&&recRef.current.stop();}catch(e){} V.stopSpeak&&V.stopSpeak(); try{streamRef.current&&streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} }, []);
+  React.useEffect(() => { if (!running) return; const id=setInterval(()=>setSecs(s=>s+1),1000); return ()=>clearInterval(id); }, [running]);
   // ---- single-tab guard: only one tab may hold live capture at a time ----
   const yieldCapture = React.useCallback((msg) => {
     wantRef.current = false; busyRef.current = false;
     try { recRef.current && recRef.current.stop(); } catch (e) {}
     V.stopSpeak && V.stopSpeak();
     setRunning(false); if (msg) setErr(msg);
-  }, []);
+    stopAudioRecording().then(() => saveCheckpoint({ finalize: true })); // another tab took over — save what we had, don't lose it
+  }, [saveCheckpoint]);
   React.useEffect(() => {
     setLockedElsewhere(Lock.busyElsewhere());
     return Lock.subscribe((st) => {
@@ -64,26 +186,55 @@ function LiveCaptureHost() {
       if (st === 'theirs' && wantRef.current) yieldCapture('Live capture moved to another tab.');
     });
   }, [yieldCapture]);
-  // free the lock (and warn) if the tab is closed mid-capture, so a stuck lock
-  // never blocks the next tab and an accidental close doesn't lose the session
+  // free the lock AND autosave if the tab is closed mid-capture, so a stuck
+  // lock never blocks the next tab and an accidental close doesn't lose the
+  // session. This is best-effort (async work isn't guaranteed to finish
+  // during unload) — the periodic checkpoint above is the real safety net,
+  // capping any loss to a few seconds even if this never runs.
   React.useEffect(() => {
-    const onUnload = (e) => { if (wantRef.current) { Lock.release(); e.preventDefault(); e.returnValue = ''; } };
-    const onHide = () => { if (wantRef.current) Lock.release(); };
+    const onUnload = (e) => { if (wantRef.current) { Lock.release(); saveCheckpoint(); e.preventDefault(); e.returnValue = ''; } };
+    const onHide = () => { if (wantRef.current) { Lock.release(); saveCheckpoint(); } };
     window.addEventListener('beforeunload', onUnload);
     window.addEventListener('pagehide', onHide);
     return () => { window.removeEventListener('beforeunload', onUnload); window.removeEventListener('pagehide', onHide); Lock.release(); };
-  }, []);
+  }, [saveCheckpoint]);
 
   const fmt = (s)=>`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   const words = transcript.trim() ? transcript.trim().split(/\s+/).length : 0;
+
+  // ---- restart-failure guard ----
+  // Chrome's SpeechRecognition legitimately ends and needs restarting during
+  // normal continuous listening (periodic session limits, silence timeouts)
+  // — the onEnd handlers below already restart it, by design. But if the mic
+  // hardware fails or (for cloud-backed recognition) the network drops, it
+  // can end up erroring and restarting in a tight loop FOREVER with no
+  // feedback to the user, since the only error explicitly handled elsewhere
+  // is 'not-allowed'. Track restarts-without-progress; give up and surface an
+  // error after a few in a row, rather than spinning silently.
+  const restartFailRef = React.useRef(0);
+  const RESTART_FAIL_LIMIT = 5;
+  const RESTART_FAIL_MIN_MS = 1500; // don't give up before the mic/recorder has had a fair chance to even start
+  const noteRecognizerProgress = () => { restartFailRef.current = 0; };
+  const noteRecognizerRestart = () => {
+    restartFailRef.current += 1;
+    const elapsed = Date.now() - (startedAtRef.current || Date.now());
+    if (restartFailRef.current >= RESTART_FAIL_LIMIT && elapsed >= RESTART_FAIL_MIN_MS) {
+      wantRef.current = false; busyRef.current = false;
+      setRunning(false);
+      setErr('Microphone stopped responding — check your mic/connection and try again.');
+      pauseAudioRecording().then(() => saveCheckpoint({ finalize: true })); // don't lose what was captured before it died
+      return false; // caller must not retry
+    }
+    return true;
+  };
 
   const startListen = () => {
     const r = V.createRecognizer(recLang, {
       continuous:true,
       onStart:()=>setRunning(true),
-      onInterim:(t)=>setInterim(t),
-      onFinal:(t)=>{ setInterim(''); setTranscript(p=> (p?p+' ':'')+t); },
-      onEnd:()=>{ if (wantRef.current) { try{r.start();}catch(e){} } else setRunning(false); },
+      onInterim:(t)=>{ noteRecognizerProgress(); setInterim(t); },
+      onFinal:(t)=>{ noteRecognizerProgress(); setInterim(''); setTranscript(p=> (p?p+' ':'')+t); },
+      onEnd:()=>{ if (wantRef.current) { if (noteRecognizerRestart()) { try{r.start();}catch(e){} } } else setRunning(false); },
       onError:(e)=>{ if(e&&e.error==='not-allowed'){ setErr('Microphone permission was blocked.'); wantRef.current=false; setRunning(false);} },
     });
     if (!r){ setErr('Continuous capture is not available in this browser.'); return false; }
@@ -117,9 +268,9 @@ function LiveCaptureHost() {
     const r = V.createRecognizer(recLang, {
       continuous:false,
       onStart:()=>setRunning(true),
-      onInterim:(t)=>setInterim(t),
-      onFinal:(t)=>{ setInterim(''); if(t){ setExchanges(p=>[...p,{role:'me',text:t}]); replyTo(t); } },
-      onEnd:()=>{ if (wantRef.current && !busyRef.current) { try{startTurn();}catch(e){} } if(!wantRef.current) setRunning(false); },
+      onInterim:(t)=>{ noteRecognizerProgress(); setInterim(t); },
+      onFinal:(t)=>{ noteRecognizerProgress(); setInterim(''); if(t){ setExchanges(p=>[...p,{role:'me',text:t}]); replyTo(t); } },
+      onEnd:()=>{ if (wantRef.current && !busyRef.current) { if (noteRecognizerRestart()) { try{startTurn();}catch(e){} } } if(!wantRef.current) setRunning(false); },
       onError:(e)=>{ if(e&&e.error==='not-allowed'){ setErr('Microphone permission was blocked.'); wantRef.current=false; setRunning(false);} },
     });
     if (!r){ setErr('Conversation mode is not available in this browser.'); return false; }
@@ -130,6 +281,13 @@ function LiveCaptureHost() {
     setErr('');
     V.stopSpeak && V.stopSpeak();
     wantRef.current = true; busyRef.current = false;
+    restartFailRef.current = 0;
+    // a fresh clip id per session; RETAINED across stop()->start() (resume,
+    // e.g. hitting pause then continuing) so that continues the same
+    // recording rather than forking a new one — only fullClose()/switchMode()
+    // clear it, since those genuinely end this recording.
+    if (!clipIdRef.current) { clipIdRef.current = 'live-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8); startedAtRef.current = Date.now(); }
+    startAudioRecording();
     if (capMode==='listen') startListen(); else startTurn();
   };
   const start = () => {
@@ -140,9 +298,46 @@ function LiveCaptureHost() {
     beginCapture();
   };
   const takeOverHere = () => { Lock.takeover({ mode: capMode }); setLockedElsewhere(false); beginCapture(); };
-  const stop = () => { wantRef.current=false; busyRef.current=false; try{recRef.current&&recRef.current.stop();}catch(e){} V.stopSpeak&&V.stopSpeak(); setRunning(false); Lock.release(); };
-  const switchMode = (m) => { if (m===capMode) return; stop(); setCapMode(m); setSecs(0); };
-  const fullClose = () => { stop(); setSecs(0); setTranscript(''); setExchanges([]); setInterim(''); closeCapture(); };
+  // Stop AUTOSAVES what was captured (audio + transcript) as a real recording
+  // — this is the fix: ending a session, however it happens, must never
+  // silently discard it. PAUSES the recorder (not a full release) so a
+  // later Resume keeps appending to the SAME clip — the pill already labels
+  // this Pause/Resume, so a naive full-stop-and-restart here would silently
+  // drop everything captured before the pause the next time it's finalized.
+  // Snapshots text/secs SYNCHRONOUSLY (before returning) so a caller that
+  // immediately wipes state afterward (switchMode, fullClose) can never race
+  // the async save into persisting empty content. Returns the save's promise
+  // so those callers know when it's SAFE to fully release the mic and clear
+  // chunksRef/clipIdRef — doing that any earlier would empty the buffer the
+  // save is about to read from.
+  const stop = () => {
+    const snap = { textOverride: capMode==='listen' ? transcript : exchanges.map(e => `${e.role==='me'?'You':'Kithra'}: ${e.text}`).join('\n\n'), secsOverride: secs };
+    wantRef.current=false; busyRef.current=false;
+    try{recRef.current&&recRef.current.stop();}catch(e){}
+    V.stopSpeak&&V.stopSpeak();
+    setRunning(false); Lock.release();
+    return pauseAudioRecording().then(() => saveCheckpoint({ finalize: true, ...snap }));
+  };
+  const switchMode = (m) => {
+    if (m===capMode) return;
+    // pause+checkpoint the outgoing mode's recording first, THEN fully
+    // release the mic and clear refs — Listen and Conversation are different
+    // recordings, so (unlike a plain Stop) this genuinely ends this one.
+    stop().then(() => stopAudioRecording()).then(() => {
+      clipIdRef.current = null; chunksRef.current = [];
+      if (lastUrlRef.current) { try { URL.revokeObjectURL(lastUrlRef.current); } catch (e) {} lastUrlRef.current = null; }
+    });
+    setCapMode(m);
+    setSecs(0); setTranscript(''); setExchanges([]); setInterim('');
+  };
+  const fullClose = () => {
+    stop().then(() => stopAudioRecording()).then(() => {
+      clipIdRef.current = null; chunksRef.current = [];
+      if (lastUrlRef.current) { try { URL.revokeObjectURL(lastUrlRef.current); } catch (e) {} lastUrlRef.current = null; }
+    });
+    setSecs(0); setTranscript(''); setExchanges([]); setInterim('');
+    closeCapture();
+  };
   const goBackground = () => { setAskBg(false); minimizeCapture(); };
   // device / meeting audio capture is owned by the Analyze screen; route to it
   const startDeviceCapture = () => { try { window.KithraAutoSysCapture = true; } catch(e){} fullClose(); go('analyze'); };
@@ -259,7 +454,7 @@ function LiveCaptureHost() {
               : <button className="btn btn-primary btn-lg grow" onClick={start}><Icon name={capMode==='converse'?'chat':'mic'} size={18} />{capMode==='converse'?'Start talking':'Start listening'}</button>}
           {running
             ? <button className="btn btn-soft btn-lg" onClick={()=>setAskBg(true)} title="Keep running in background"><Icon name="chevD" size={17} />Background</button>
-            : <button className="btn btn-soft btn-lg" disabled={!transcript && exchanges.length===0} onClick={()=>{ stop(); closeCapture(); go('analyze'); }} title="Analyze captured audio"><Icon name="trend" size={17} />Analyze</button>}
+            : <button className="btn btn-soft btn-lg" disabled={!transcript && exchanges.length===0} onClick={()=>{ fullClose(); go('analyze'); }} title="Analyze captured audio"><Icon name="trend" size={17} />Analyze</button>}
         </div>
 
         {nativeCap && !running && (
