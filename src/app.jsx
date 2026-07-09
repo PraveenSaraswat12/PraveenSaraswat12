@@ -225,6 +225,11 @@ function AppProvider() {
     setClips(cs => cs.map(c => {
       if (c.id !== id) return c;
       const next = { ...c, ...patch };
+      // analysis is a nested bag (acoustic metrics + tone + transcript segments,
+      // set by different features at different times) — MERGE it, never replace
+      // it wholesale, or a later partial patch (e.g. just {tone}) would silently
+      // erase earlier fields (e.g. wpm/talkRatio) still needed elsewhere.
+      if (patch.analysis) next.analysis = { ...(c.analysis || {}), ...patch.analysis };
       try { if (window.KithraCloud && window.KithraCloud.configured()) window.KithraCloud.saveRecording(next); } catch (e) {}
       return next;
     }));
@@ -347,7 +352,8 @@ function AppShell() {
 
 /* ---------- sidebar ---------- */
 function Sidebar() {
-  const { route, go, sidebarCollapsed, setSidebarCollapsed, planAllows, openCapture } = useApp();
+  const { route, go, sidebarCollapsed, setSidebarCollapsed, planAllows, openCapture, capture, expandCapture } = useApp();
+  const capActive = !!(capture && (capture.open || capture.minimized));
   const groups = [
     { key:'main', label:'Workspace' },
     { key:'data', label:'Your data' },
@@ -374,10 +380,18 @@ function Sidebar() {
         </div>
       </div>
       <div className="nav-group">
-        <a className="nav-item nav-live" onClick={()=>openCapture('listen')} title="Start live voice capture">
-          <span className="ic"><Icon name="mic" size={19} /></span>
-          <span className="lbl">Live capture</span>
+        <a className={`nav-item nav-live ${capActive?'nav-live-on':''}`} onClick={()=> capActive ? expandCapture() : openCapture('listen')}
+          title={capActive ? 'Live capture is running — tap to open' : 'Start live voice capture'}>
+          <span className="ic nav-live-ic"><Icon name="mic" size={19} fill={capActive} /></span>
+          <span className="lbl">{capActive ? `Live · ${capture.capMode==='converse'?'Conversation':'Listening'}` : 'Live capture'}</span>
+          {capActive && <span className="lc-notif-dot" data-on="1" style={{ marginLeft:'auto' }} />}
         </a>
+        {!capActive && (
+          <div className="side-quickcap">
+            <button className="side-quickcap-btn" onClick={()=>openCapture('listen')}><Icon name="wave" size={12} />Listen</button>
+            <button className="side-quickcap-btn" onClick={()=>openCapture('converse')}><Icon name="chat" size={12} />Converse</button>
+          </div>
+        )}
       </div>
       {groups.map(g => (
         <div className="nav-group" key={g.key}>

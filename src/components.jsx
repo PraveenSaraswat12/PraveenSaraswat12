@@ -271,22 +271,34 @@ function redactPII(text) {
     .replace(/\b\d{6,}\b/g, '[number]');
 }
 
-/* ---------- Real audio player (plays an actual uploaded/recorded file) ---------- */
-function RealPlayer({ src, peaks, durSec = 0, accent = 'var(--accent)' }) {
-  const ref = React.useRef(null);
+/* ---------- Real audio player (plays an actual uploaded/recorded file) ----------
+   forwardRef exposes { seekTo(t), play(), pause() } and an optional onTime(t)
+   callback fires on every timeupdate — together these let a parent (e.g. an
+   interactive transcript) drive and follow playback without owning the <audio>
+   element itself. ---------- */
+const RealPlayer = React.forwardRef(function RealPlayer({ src, peaks, durSec = 0, accent = 'var(--accent)', onTime: onTimeProp }, fwdRef) {
+  const audioRef = React.useRef(null);
   const [playing, setPlaying] = React.useState(false);
   const [cur, setCur] = React.useState(0);
   const [total, setTotal] = React.useState(durSec || 0);
   React.useEffect(() => { setPlaying(false); setCur(0); setTotal(durSec || 0); }, [src, durSec]);
   const fmt = (s) => `${Math.floor((s || 0) / 60)}:${String(Math.floor((s || 0) % 60)).padStart(2, '0')}`;
   const frac = total ? Math.min(1, cur / total) : 0;
-  const toggle = () => { const a = ref.current; if (!a) return; if (a.paused) a.play().catch(() => {}); else a.pause(); };
-  const onTime = () => { const a = ref.current; if (a) setCur(a.currentTime || 0); };
-  const onMeta = () => { const a = ref.current; if (a && isFinite(a.duration) && a.duration > 0) setTotal(a.duration); };
-  const seek = (e) => { const a = ref.current; if (!a || !total) return; const r = e.currentTarget.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); try { a.currentTime = f * total; setCur(f * total); } catch (_) {} };
+  const toggle = () => { const a = audioRef.current; if (!a) return; if (a.paused) a.play().catch(() => {}); else a.pause(); };
+  const onTime = () => { const a = audioRef.current; if (a) { const t = a.currentTime || 0; setCur(t); if (onTimeProp) onTimeProp(t); } };
+  const onMeta = () => { const a = audioRef.current; if (a && isFinite(a.duration) && a.duration > 0) setTotal(a.duration); };
+  const seek = (e) => { const a = audioRef.current; if (!a || !total) return; const r = e.currentTarget.getBoundingClientRect(); const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); try { a.currentTime = f * total; setCur(f * total); } catch (_) {} };
+  React.useImperativeHandle(fwdRef, () => ({
+    seekTo(t, autoplay = true) {
+      const a = audioRef.current; if (!a) return;
+      try { a.currentTime = Math.max(0, t); setCur(a.currentTime); if (autoplay) a.play().catch(() => {}); } catch (_) {}
+    },
+    play() { audioRef.current?.play().catch(() => {}); },
+    pause() { audioRef.current?.pause(); },
+  }), []);
   return (
     <div className="row" style={{ gap: 14, alignItems: 'center' }}>
-      <audio ref={ref} src={src} preload="metadata" style={{ display: 'none' }}
+      <audio ref={audioRef} src={src} preload="metadata" style={{ display: 'none' }}
         onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
         onTimeUpdate={onTime} onLoadedMetadata={onMeta} onDurationChange={onMeta} />
       <button type="button" className="btn btn-icon btn-primary" style={{ width: 46, height: 46, borderRadius: '50%', flex: 'none' }} onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
@@ -302,7 +314,7 @@ function RealPlayer({ src, peaks, durSec = 0, accent = 'var(--accent)' }) {
       <span className="tnum faint" style={{ fontSize: 12, flex: 'none', minWidth: 88, textAlign: 'right' }}>{fmt(cur)} / {fmt(total)}</span>
     </div>
   );
-}
+});
 
 Object.assign(window, {
   Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights,

@@ -233,7 +233,10 @@ const Cloud = {
     return j.text || '';
   },
 
-  // accurate transcription via the Edge Function (Gemini multimodal)
+  // accurate transcription via the Edge Function (Groq Whisper, Gemini fallback).
+  // Returns { text, segments, engine } — segments (start/end/text) are only
+  // present from the Groq engine, and power click-to-seek + follow-along
+  // highlighting in the transcript UI.
   async transcribe(audioBase64, opts = {}) {
     const cfg = getConfig(); if (!cfg) throw new Error('Cloud not configured');
     const c = await getClient();
@@ -247,7 +250,7 @@ const Cloud = {
     if (!res.ok) throw new Error('Transcription failed (' + res.status + ')');
     const j = await res.json();
     if (j.error) throw new Error(j.error);
-    return j.text || '';
+    return { text: j.text || '', segments: Array.isArray(j.segments) ? j.segments : null, engine: j.engine || '' };
   },
 
   // ---- payments (Razorpay via the `payments` Edge Function) ----

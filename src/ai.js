@@ -72,12 +72,18 @@ export async function clipInsights(clip, mode) {
     `CONTEXT:\n${ctx}\n\n` +
     `Analyze THIS recording. Respond in EXACTLY this format (plain text, keep each line under 30 words):\n` +
     `SUMMARY: <2 sentence summary of what was said/how it went>\n` +
+    `TONE: <one word: positive, neutral, or negative — the overall tone of THIS conversation>\n` +
     `WIN: <one thing that went well>\n` +
     `IMPROVE: <one concrete thing to improve>\n` +
-    `NEXT: <the single best next action>`;
+    `NEXT: <the single best next action>\n` +
+    `RECOMMEND: <one specific, content-aware coaching tip referencing what was actually said>`;
   const out = await window.KithraCloud.askAI(prompt, sys);
   const grab = (k) => { const m = out.match(new RegExp(k + ':\\s*([^\\n]+)', 'i')); return m ? m[1].trim() : ''; };
-  const res = { summary: grab('SUMMARY'), win: grab('WIN'), improve: grab('IMPROVE'), next: grab('NEXT'), raw: out };
+  const toneWord = grab('TONE').toLowerCase();
+  const tone = /positive|negative|neutral/.test(toneWord)
+    ? { label: toneWord.match(/positive|negative|neutral/)[0], score: toneWord.includes('positive') ? 0.6 : toneWord.includes('negative') ? -0.6 : 0, method: 'ai' }
+    : null;
+  const res = { summary: grab('SUMMARY'), win: grab('WIN'), improve: grab('IMPROVE'), next: grab('NEXT'), recommend: grab('RECOMMEND'), tone, raw: out };
   if (!res.summary && out) res.summary = out.split('\n')[0].slice(0, 240);
   return res;
 }

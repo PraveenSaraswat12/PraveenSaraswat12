@@ -505,20 +505,6 @@ async function to16kMono(src) {
   const rendered = await off.startRendering();
   return rendered.getChannelData(0);
 }
-// encode a Float32 PCM array as a base64 16-bit WAV (for cloud/Gemini transcription)
-function floatToWavBase64(float32, sr) {
-  const n = float32.length;
-  const buf = new ArrayBuffer(44 + n * 2);
-  const dv = new DataView(buf);
-  const w = (o, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(o + i, s.charCodeAt(i)); };
-  w(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); dv.setUint32(16, 16, true);
-  dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, sr, true); dv.setUint32(28, sr * 2, true);
-  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, n * 2, true);
-  let o = 44; for (let i = 0; i < n; i++) { const s = Math.max(-1, Math.min(1, float32[i])); dv.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); o += 2; }
-  const bytes = new Uint8Array(buf); let bin = ''; const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
-  return btoa(bin);
-}
 function transcriptInsights(text, durSec) {
   const words = text.match(/[A-Za-z0-9’']+/g) || [];
   const wc = words.length;
@@ -526,6 +512,38 @@ function transcriptInsights(text, durSec) {
   const fillers = (text.match(/\b(um+|uh+|er+|like|you know|sort of|kind of|basically|actually|literally)\b/gi) || []).length;
   return { wc, wpm, fillers };
 }
+
+// ---- lightweight on-device sentiment (tone) scoring — no network needed ----
+// Gives every transcribed recording an instant positive/neutral/negative read.
+// When AI insights are generated later (clipInsights), its more nuanced tone
+// read overwrites this lexicon-based baseline — best of both worlds.
+const TONE_POS = new Set(['great','good','excellent','love','loved','loving','happy','glad','agree','agreed','thanks','thank','appreciate','appreciated','awesome','perfect','yes','confident','excited','resolved','helpful','wonderful','fantastic','amazing','pleased','enjoy','enjoyed','positive','success','successful','win','wins','won','best','better','improve','improved','improving','support','supportive','encourage','encouraging','delighted','fun','nice','kind','grateful','thankful','congrats','congratulations','impressive','smooth','easy','clear','optimistic','proud','relief','relieved','comfortable']);
+const TONE_NEG = new Set(['bad','worst','hate','hated','angry','annoyed','annoying','frustrated','frustrating','problem','problems','issue','issues','concern','concerned','concerns','disagree','disagreed','unfortunately','sorry','apologize','delay','delayed','confused','confusing','worried','worry','never','difficult','complaint','complaints','complain','complained','fail','failed','failure','wrong','mistake','mistakes','upset','disappointed','disappointing','terrible','awful','horrible','poor','stuck','blocked','risk','risky','doubtful','unclear','unsure','anxious','stress','stressed','stressful','conflict','argue','argued','argument','refuse','refused','reject','rejected','cancel','cancelled']);
+function scoreTone(text) {
+  const words = (text || '').toLowerCase().match(/[a-z']+/g) || [];
+  let pos = 0, neg = 0;
+  for (const w of words) { if (TONE_POS.has(w)) pos++; else if (TONE_NEG.has(w)) neg++; }
+  const hits = pos + neg;
+  const raw = hits ? (pos - neg) / (hits + 2) : 0; // +2 smoothing dampens noise from a couple of stray words
+  const score = Math.round(Math.max(-1, Math.min(1, raw)) * 100) / 100;
+  const label = hits < 2 ? 'neutral' : score > 0.2 ? 'positive' : score < -0.2 ? 'negative' : 'neutral';
+  return { label, score, hits, method: 'lexicon' };
+}
+
+// Fetch a blob: URL's ORIGINAL bytes (no decode/re-encode) as base64 — used for
+// cloud transcription. Sending the original compressed audio (webm/opus/m4a/…)
+// instead of re-encoding to raw 16-bit WAV keeps uploads small and fast, and
+// keeps longer recordings under the provider's file-size limit. (Raw 16kHz PCM
+// runs ~2MB/min — a 15-minute recording alone would near Groq's 25MB cap.)
+async function fetchAsBase64(url) {
+  const blob = await (await fetch(url)).blob();
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = ''; const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  return { base64: btoa(bin), mimeType: blob.type || 'audio/webm' };
+}
+
+const LONG_RECORDING_SECS = 20 * 60; // above this, on-device risks slow/heavy decode on mobile
 
 function TranscriptPanel({ clipUrl, clipId, durSec }) {
   const [state, setState] = React.useState('idle'); // idle | loading | running | done | error
@@ -536,21 +554,31 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
   const [ctx, setCtx] = React.useState(''); // names/terms to spell right
   const [engine, setEngine] = React.useState('');
   const [askConsent, setAskConsent] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
   const { hasConsent, grantConsent, redact, updateClip } = useApp();
   const cloudOn = !!(window.KithraCloud && window.KithraCloud.configured && window.KithraCloud.configured());
   const [useCloud, setUseCloud] = React.useState(cloudOn); // when an account is connected, default to Kithra AI (fast, accurate, no 240MB download); fully switchable to private on-device
-  const finish = (t) => {
+  const finish = (t, segments) => {
     const final = redact ? redactPII((t || '').trim()) : (t || '').trim();
     setText(final); setState('done');
-    if (clipId && final) updateClip(clipId, { transcript: final }); // flows to Library, Insights & Ask
+    if (clipId && final) {
+      // updateClip merges analysis (never replaces it), so this can't clobber
+      // this clip's existing acoustic metrics — only add tone/segments to them.
+      const patch = { transcript: final, analysis: { tone: scoreTone(final) } }; // flows to Library, Insights & Ask
+      if (Array.isArray(segments) && segments.length) patch.analysis.segments = segments;
+      updateClip(clipId, patch);
+    }
   };
   const runCloud = async () => {
     setState('running'); setEngine('Kithra AI');
-    const audio = await to16kMono(clipUrl);
-    const b64 = floatToWavBase64(audio, 16000);
-    const t = await window.KithraCloud.transcribe(b64, { mimeType: 'audio/wav', language: lang || undefined, context: ctx || undefined });
+    // send the ORIGINAL compressed audio (not a re-encoded raw WAV) — Groq
+    // Whisper accepts webm/m4a/ogg/mp3/flac directly and resamples server-side,
+    // so this is far smaller/faster and keeps longer recordings under its
+    // 25MB file-size limit.
+    const { base64, mimeType } = await fetchAsBase64(clipUrl);
+    const { text: t, segments } = await window.KithraCloud.transcribe(base64, { mimeType, language: lang || undefined, context: ctx || undefined });
     try { const m = 'kithra_cloud_uses_' + new Date().toISOString().slice(0,7); localStorage.setItem(m, String((Number(localStorage.getItem(m))||0)+1)); } catch (e) {}
-    finish(t);
+    finish(t, segments);
   };
   const runLocal = async () => {
     setState('loading'); setProg(0); setEngine('On-device');
@@ -639,6 +667,12 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
               ? 'Highest accuracy across languages, accents and names (Kithra AI, free). It auto-detects the spoken language and transcribes it as-is. Opt-in: you’ll be asked for consent before any audio leaves this device.'
               : 'On-device transcription — private, nothing leaves your device. It auto-detects the spoken language and keeps it as-is (Hindi stays Hindi, etc.). The first run downloads a model (~240 MB).'}
           </p>
+          {!(cloudOn && useCloud) && durSec > LONG_RECORDING_SECS && (
+            <div className="row" style={{ gap: 8, padding: '9px 12px', borderRadius: 'var(--r-ctrl)', background: 'var(--warn-soft)', color: 'var(--warn)', fontSize: 12.5, lineHeight: 1.5 }}>
+              <Icon name="shield" size={14} style={{ flex: 'none' }} />
+              <span>This is a long recording — on-device transcription decodes the whole file in your browser and can be slow (or heavy on phones). {cloudOn ? 'Kithra AI handles long recordings faster and more reliably.' : 'Consider a shorter clip if this struggles.'}</span>
+            </div>
+          )}
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}</div>
           <button className="btn btn-primary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={run}><Icon name="spark" size={14} fill />{cloudOn && useCloud ? 'Transcribe with Kithra AI' : 'Transcribe on-device'}</button>
         </div>
@@ -674,6 +708,9 @@ function TranscriptPanel({ clipUrl, clipId, durSec }) {
           </div>
           <div className="row" style={{ gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>{langSelect}{ctxInput}
             <button className="btn btn-soft btn-sm" onClick={run}><Icon name="refresh" size={14} />Re-run</button>
+            <button className="btn btn-soft btn-sm" onClick={async () => { try { await navigator.clipboard.writeText(text); } catch (e) {} setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+              <Icon name={copied ? 'check' : 'file'} size={14} />{copied ? 'Copied' : 'Copy'}
+            </button>
           </div>
         </div>
       )}
@@ -700,7 +737,12 @@ function AiInsightsPanel({ clipId, res, durSec, mode }) {
       const focusClip = { id: clipId, name: res.name, analysis: res, transcript, durSec };
       const out = await window.KithraAI.clipInsights(focusClip, mode);
       setData(out); setState('done');
-      if (clipId) updateClip(clipId, { insights: out }); // persists + flows to Dashboard/Ask/cloud
+      // persists + flows to Dashboard/Ask/cloud. AI's own tone read (more
+      // nuanced than the lexicon baseline) overwrites it when available;
+      // updateClip merges analysis, so this can't clobber other fields.
+      const patch = { insights: out };
+      if (out.tone) patch.analysis = { tone: out.tone };
+      if (clipId) updateClip(clipId, patch);
     } catch (e) {
       setErr('Couldn’t generate insights just now (' + ((e && e.message) || 'network') + '). Try again in a moment.');
       setState('error');
@@ -913,7 +955,7 @@ function AnalyzeResults({ res, aiSummary, mode, clipUrl, clipId, planAllows, go 
   );
 }
 
-Object.assign(window, { Analyze, TranscriptPanel });
+Object.assign(window, { Analyze, TranscriptPanel, transcriptInsights, scoreTone });
 
 
-export { Analyze, TranscriptPanel };
+export { Analyze, TranscriptPanel, transcriptInsights, scoreTone };

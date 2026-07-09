@@ -71,7 +71,11 @@ export async function patchClip(id, patch) {
     const cur = await done(os.get(id));
     if (!cur) return false;
     const { url, hasAudio, ...clean } = patch;
-    await done(os.put({ ...cur, ...clean, id, savedAt: Date.now() }));
+    const merged = { ...cur, ...clean, id, savedAt: Date.now() };
+    // analysis is a nested bag (acoustic metrics + tone + segments) — merge it
+    // so a partial patch (e.g. just {tone}) can't erase earlier fields.
+    if (clean.analysis) merged.analysis = { ...(cur.analysis || {}), ...clean.analysis };
+    await done(os.put(merged));
     return true;
   } catch (e) { return false; }
 }

@@ -274,6 +274,23 @@ textarea.field{height:auto;padding:12px 14px;resize:none;line-height:1.5}
 .side.collapsed .side-brand{justify-content:center}
 .side.collapsed .nav-item{justify-content:center;padding:0}
 
+/* Live capture — the app's flagship action gets real visual weight in the
+   sidebar instead of blending in as a plain nav link. Deliberately NOT
+   accent-soft: that's also .nav-item.active's fill, so on the Dashboard
+   route (accent-soft active state) the two would render pixel-identical. A
+   bordered card reads as "action" rather than "you are here" in every state. */
+.nav-live{height:auto;min-height:48px;padding:9px 11px;margin-bottom:2px;background:var(--surface-2);border:1.5px solid var(--accent);color:var(--accent-strong);font-weight:700}
+.nav-live:hover{background:var(--accent-soft)}
+.nav-live-ic{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--accent);color:#fff;flex:none}
+.nav-live-on{background:var(--good-soft);color:var(--good)}
+.nav-live-on .nav-live-ic{background:var(--good)}
+.side-quickcap{display:flex;gap:6px;padding:0 4px 6px}
+.side-quickcap-btn{flex:1 1 0;display:flex;align-items:center;justify-content:center;gap:5px;height:28px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink-2);font-size:11.5px;font-weight:600;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.side-quickcap-btn:hover{background:var(--accent-soft);color:var(--accent-strong);border-color:var(--accent)}
+.side.collapsed .side-quickcap{display:none}
+.side.collapsed .nav-live{justify-content:center}
+.side.collapsed .nav-live .lc-notif-dot{display:none}
+
 /* topbar */
 .topbar{
   height:66px;flex:none;display:flex;align-items:center;gap:14px;

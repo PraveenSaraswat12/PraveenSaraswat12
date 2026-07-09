@@ -96,6 +96,11 @@
 .cv-layout{display:grid;grid-template-columns:1fr 360px;gap:var(--gap);align-items:start}
 @media (max-width:1080px){.cv-layout{grid-template-columns:1fr}}
 .cv-player{position:sticky;top:0;z-index:5;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:16px 18px;box-shadow:var(--shadow-1)}
+/* interactive, timestamped transcript — click a line to seek, active line follows playback */
+.cv-transcript-segs{font-size:14.5px;line-height:1.85}
+.cv-seg{cursor:pointer;border-radius:4px;padding:1px 3px;margin:0 -3px;transition:background .15s var(--ease,ease),color .15s var(--ease,ease)}
+.cv-seg:hover{background:var(--accent-soft)}
+.cv-seg.active{background:var(--accent-soft);color:var(--accent-strong);font-weight:600}
 .tline{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
 .tline:last-child{border-bottom:0}
 .tline .tt{font-size:12px;font-weight:600;color:var(--ink-3);width:46px;flex:none;font-variant-numeric:tabular-nums;padding-top:3px}
