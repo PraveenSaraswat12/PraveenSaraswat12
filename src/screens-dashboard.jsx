@@ -90,6 +90,14 @@ function Dashboard() {
   const wpmSeries = series(x=>x.wpm);
   const voiceSeries = series(x=>x.talkRatio!=null?Math.round(x.talkRatio*100):null);
 
+  // tone/behavior — positive/neutral/negative, from every recording that's
+  // been transcribed (lexicon-scored the instant a transcript lands; refined
+  // by Kithra AI once you generate insights for a recording)
+  const toned = ordered.filter(c => a(c).tone);
+  const toneCounts = { positive:0, neutral:0, negative:0 };
+  toned.forEach(c => { const l = a(c).tone.label; if (toneCounts[l]!=null) toneCounts[l]++; });
+  const toneSeries = toned.map(c => Math.round((a(c).tone.score||0) * 100));
+
   // AI brief — a real Gemini read across your library (consented)
   const [brief, setBrief] = React.useState('');
   const [briefState, setBriefState] = React.useState('idle');
@@ -179,6 +187,37 @@ function Dashboard() {
               {voiceSeries.length>1
                 ? <LineChart series={[{ color:'var(--viz-2)', data:voiceSeries.map((y,x)=>({x,y})) }]} height={170} yMin={0} yMax={100} labels={voiceSeries.map(()=> '')} />
                 : <p className="faint" style={{ fontSize:13 }}>Add one more recording to see your balance.</p>}
+            </Panel>
+          </div>
+
+          <div className="grid g-2" style={{ gap:'var(--gap)', marginTop:'var(--gap)' }}>
+            <Panel title="Conversation tone" sub={toned.length ? `From ${toned.length} of ${(clips||[]).length} recording${(clips||[]).length>1?'s':''} (transcribed)` : 'Transcribe a recording to see this'}>
+              {toned.length ? (
+                <div className="row" style={{ gap:24, alignItems:'center', flexWrap:'wrap' }}>
+                  <Donut
+                    segments={[
+                      { value: toneCounts.positive || 0.0001, color: 'var(--good)' },
+                      { value: toneCounts.neutral  || 0.0001, color: 'var(--ink-3)' },
+                      { value: toneCounts.negative || 0.0001, color: 'var(--bad)' },
+                    ]}
+                    size={130} thickness={16}
+                    centerTop="mostly"
+                    centerBig={toneCounts.positive>=toneCounts.neutral && toneCounts.positive>=toneCounts.negative ? 'Positive' : toneCounts.negative>=toneCounts.neutral ? 'Negative' : 'Neutral'}
+                  />
+                  <Legend items={[
+                    { name:`Positive · ${toneCounts.positive}`, color:'var(--good)' },
+                    { name:`Neutral · ${toneCounts.neutral}`, color:'var(--ink-3)' },
+                    { name:`Negative · ${toneCounts.negative}`, color:'var(--bad)' },
+                  ]} />
+                </div>
+              ) : (
+                <p className="faint" style={{ fontSize:13 }}>Once a recording is transcribed, Kithra reads its tone automatically — no extra step needed.</p>
+              )}
+            </Panel>
+            <Panel title="Tone over time" sub="How your conversations have trended, most recent last">
+              {toneSeries.length>1
+                ? <LineChart series={[{ color:'var(--accent)', data:toneSeries.map((y,x)=>({x,y})) }]} height={170} yMin={-100} yMax={100} labels={toneSeries.map(()=> '')} />
+                : <p className="faint" style={{ fontSize:13 }}>Transcribe one more recording to see your tone trend.</p>}
             </Panel>
           </div>
         </>

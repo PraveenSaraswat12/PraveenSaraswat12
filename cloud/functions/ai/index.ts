@@ -63,6 +63,8 @@ async function groqChat(messages: any[], maxTokens: number) {
   }
   throw new Error(lastErr);
 }
+// Groq Whisper — verbose_json + segment timestamps, so the client can offer
+// click-to-seek / follow-along highlighting during playback.
 async function groqTranscribe(bytes: Uint8Array, mime: string, language?: string, context?: string) {
   if (!GROQ_KEY) throw new Error("GROQ_API_KEY not set");
   let lastErr = "Transcription failed";
@@ -70,13 +72,19 @@ async function groqTranscribe(bytes: Uint8Array, mime: string, language?: string
     const fd = new FormData();
     fd.append("model", model);
     fd.append("file", new Blob([bytes], { type: mime || "audio/webm" }), "audio." + extFor(mime));
-    fd.append("response_format", "json");
+    fd.append("response_format", "verbose_json");
+    fd.append("timestamp_granularities[]", "segment");
     fd.append("temperature", "0");
     if (language && /^[a-z]{2}$/i.test(language)) fd.append("language", language.toLowerCase());
     if (context) fd.append("prompt", String(context).slice(0, 500));
     const r = await fetch(GROQ_API + "/audio/transcriptions", { method: "POST", headers: { Authorization: "Bearer " + GROQ_KEY }, body: fd });
     const d = await r.json().catch(() => ({}));
-    if (r.ok) return { text: (d?.text || "").trim(), model };
+    if (r.ok) {
+      const segments = Array.isArray(d?.segments)
+        ? d.segments.map((s: any) => ({ start: s.start, end: s.end, text: (s.text || "").trim() })).filter((s: any) => s.text)
+        : null;
+      return { text: (d?.text || "").trim(), segments, model };
+    }
     lastErr = d?.error?.message || ("HTTP " + r.status);
     if (!/model|decommission|not found|does not exist/i.test(lastErr)) break;
   }
@@ -127,8 +135,8 @@ serve(async (req) => {
       let groqErr = "";
       if (GROQ_KEY) {
         try {
-          const { text, model } = await groqTranscribe(b64ToBytes(body.audio), body.mimeType || "audio/webm", body.language, body.context);
-          return json({ text, model, engine: "groq-whisper" });
+          const { text, segments, model } = await groqTranscribe(b64ToBytes(body.audio), body.mimeType || "audio/webm", body.language, body.context);
+          return json({ text, segments, model, engine: "groq-whisper" });
         } catch (e) { groqErr = (e as Error).message || "Groq failed"; }
       }
       if (GEMINI_KEY) {
