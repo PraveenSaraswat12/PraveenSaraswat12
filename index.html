@@ -9,7 +9,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <style>
   html,body,#root{height:100%}
-  body{background:#0c0e1c}
+  /* Canvas fallback before React mounts; styles.css re-themes <html> once
+     data-theme is mirrored onto it. Never a dark hardcode — it used to show
+     as a black band wherever a page overflowed the viewport. */
+  html{background:#f4f1ea}
   #boot{position:fixed;inset:0;display:grid;place-items:center;background:#f4f1ea;z-index:9999;transition:opacity .4s}
   #boot.gone{opacity:0;pointer-events:none}
   .boot-wave{display:flex;gap:4px;align-items:center;height:34px}

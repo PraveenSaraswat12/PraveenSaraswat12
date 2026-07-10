@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, QuietWave, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 /* ============================================================
    KITHRA — Dashboard: real metrics from YOUR recordings + a Gemini brief
    ============================================================ */
@@ -127,6 +127,7 @@ function Dashboard() {
               <button className="btn btn-primary btn-lg" onClick={()=>go('analyze')}><Icon name="mic" size={18} />Record or upload</button>
               <button className="btn btn-soft btn-lg" onClick={()=>go('books')}><Icon name="book" size={17} />Browse the books</button>
             </div>
+            <QuietWave width={230} height={26} className="quiet-empty-wave" />
             <PrivacyChip text="Analyzed on-device · nothing leaves without your consent" />
           </div>
         </div>

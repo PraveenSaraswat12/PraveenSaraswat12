@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, QuietWave, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 /* ============================================================
    LUMEN — Landing / Home (2 hero variations)
    ============================================================ */
@@ -28,6 +28,8 @@ function Landing() {
       </header>
 
       {hero === 'A' ? <HeroCentered enter={enter} /> : <HeroSplit enter={enter} />}
+
+      <div className="quiet-divider" aria-hidden="true"><QuietWave width={280} height={30} /></div>
 
       {/* flow explainer */}
       <section id="how" className="lp-sec">
@@ -75,6 +77,16 @@ function Landing() {
             points={['Habits & behavior patterns','Emotional tone over time','Small, kind steps to try']}
             onGo={()=>enter('personal')} />
         </div>
+      </section>
+
+      {/* the quiet moment — what Kithra is really about */}
+      <section className="lp-quiet">
+        <QuietWave width={300} height={34} className="anim-in" />
+        <blockquote className="anim-up">
+          Half of every conversation happens in the pauses.
+          Kithra listens to both halves.
+        </blockquote>
+        <span className="eyebrow who">the pace · the pauses · the words between the words</span>
       </section>
 
       {/* trust strip */}

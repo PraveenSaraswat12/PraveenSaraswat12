@@ -159,6 +159,38 @@ function LiveWave({ bars = 40, height = 56, color = 'var(--accent)', speed = 1 }
   );
 }
 
+/* ---------- QuietWave — the Kithra motif ---------- */
+// "Words settling into silence": a waveform that decays into a flat line and
+// ends in three quiet dots. Speech on the left, listening on the right.
+// Purely decorative (aria-hidden) — used for empty states and section marks.
+function QuietWave({ width = 240, height = 32, color = 'var(--accent)', bars = 24, seed = 5, className = '' }) {
+  const heights = React.useMemo(() => {
+    const hs = waveHeights(bars, seed, 0.1);
+    return hs.map((h, i) => {
+      const k = i / (bars - 1);
+      return Math.max(0.07, h * Math.pow(1 - k, 1.5)); // decay toward silence
+    });
+  }, [bars, seed]);
+  const bw = 3;
+  const speechW = width * 0.62;
+  const gap = (speechW - bars * bw) / (bars - 1);
+  const midY = height / 2;
+  return (
+    <svg className={`quiet-wave ${className}`} width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none" aria-hidden="true" focusable="false">
+      {heights.map((h, i) => {
+        const bh = Math.max(2.4, h * height);
+        return <rect key={i} x={i * (bw + gap)} y={midY - bh / 2} width={bw} height={bh} rx={1.5} fill={color} opacity={0.3 + 0.7 * h} />;
+      })}
+      {/* the flat line of listening */}
+      <line x1={speechW + 6} y1={midY} x2={width - 30} y2={midY} stroke={color} strokeOpacity="0.32" strokeWidth="2" strokeLinecap="round" />
+      {/* three quiet dots — the pause that speaks */}
+      {[0, 1, 2].map(i => (
+        <circle key={i} cx={width - 22 + i * 9} cy={midY} r={2.2} fill={color} opacity={0.65 - i * 0.2} />
+      ))}
+    </svg>
+  );
+}
+
 /* ---------- small UI ---------- */
 function Avatar({ label, color, size = 34 }) {
   return <div className="avatar" style={{ width:size, height:size, background:color, fontSize:size*0.38 }}>{label}</div>;
@@ -317,9 +349,9 @@ const RealPlayer = React.forwardRef(function RealPlayer({ src, peaks, durSec = 0
 });
 
 Object.assign(window, {
-  Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights,
+  Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, QuietWave,
   Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer, redactPII,
 });
 
 
-export { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer, redactPII };
+export { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, QuietWave, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, RealPlayer, redactPII };

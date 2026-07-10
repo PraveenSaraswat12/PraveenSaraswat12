@@ -9,6 +9,10 @@
 /* ---------- Reset ---------- */
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;height:100%}
+/* The page canvas follows the theme (app.jsx mirrors data-theme/data-mode onto
+   <html>, which also brings the --paper tokens into scope up here). Anything
+   that ever overflows the app frame lands on paper — never on a dark body. */
+html{background:var(--paper,#f4f1ea)}
 body{font-family:var(--font-ui);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button,input,textarea,select{font-family:inherit;font-size:inherit;color:inherit}
 button{cursor:pointer}
@@ -244,9 +248,12 @@ textarea.field{height:auto;padding:12px 14px;resize:none;line-height:1.5}
    APP SHELL
    ============================================================ */
 #lumen-root{color:var(--ink);background:var(--paper)}
-.app{display:grid;grid-template-columns:auto 1fr;height:100%;background:var(--paper);color:var(--ink)}
+/* grid-template-rows caps the single implicit row at the frame height — without
+   it the row grows to its content, the shell overflows the viewport and the
+   page scrolls on <body> instead of inside .app-scroll (the "black band" bug) */
+.app{display:grid;grid-template-columns:auto 1fr;grid-template-rows:minmax(0,1fr);height:100%;background:var(--paper);color:var(--ink)}
 .app-main{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-.app-scroll{flex:1;overflow-y:auto;overflow-x:hidden}
+.app-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
 .page{max-width:1240px;margin:0 auto;padding:30px clamp(20px,3.2vw,42px) 64px;width:100%}
 
 /* sidebar */
@@ -254,7 +261,13 @@ textarea.field{height:auto;padding:12px 14px;resize:none;line-height:1.5}
   width:248px;flex:none;display:flex;flex-direction:column;gap:6px;
   background:var(--surface);border-right:1px solid var(--line);
   padding:20px 14px;transition:width .28s var(--ease);
+  /* on short viewports the nav + workspace card exceed the frame height —
+     scroll inside the rail instead of pushing the whole page into body scroll */
+  overflow-y:auto;overflow-x:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--line-2) transparent;
 }
+.side::-webkit-scrollbar{width:8px}
+.side::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px;border:2px solid transparent;background-clip:content-box}
 .side.collapsed{width:74px}
 .side-brand{display:flex;align-items:center;gap:11px;padding:6px 8px 16px}
 .nav-group{display:flex;flex-direction:column;gap:3px}
