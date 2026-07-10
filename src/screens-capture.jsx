@@ -36,6 +36,7 @@ function LiveCaptureHost() {
   const [thinking, setThinking] = React.useState(false);
   const [err, setErr] = React.useState('');
   const [askBg, setAskBg] = React.useState(false);
+  const [showRecNotice, setShowRecNotice] = React.useState(false);
   const [nativeCap, setNativeCap] = React.useState(false);
   const [lockedElsewhere, setLockedElsewhere] = React.useState(false);
   const recRef = React.useRef(null);
@@ -293,7 +294,19 @@ function LiveCaptureHost() {
   const start = () => {
     setErr('');
     if (!V.sttSupported) { setErr('Live capture needs Chrome or Edge with microphone access. The native app handles this in the background.'); return; }
+    // Same one-time reminder as Analyze's recording flow (shared localStorage
+    // flag) — recording other people needs their informed consent (DPDP Act
+    // and similar laws elsewhere). Legal promises this reminder site-wide.
+    let acked = false; try { acked = localStorage.getItem('kithra_rec_ack') === '1'; } catch (e) {}
+    if (!acked) { setShowRecNotice(true); return; }
     if (!Lock.claim({ mode: capMode })) { setLockedElsewhere(true); return; } // another tab already owns live capture
+    setLockedElsewhere(false);
+    beginCapture();
+  };
+  const ackAndStart = () => {
+    try { localStorage.setItem('kithra_rec_ack', '1'); } catch (e) {}
+    setShowRecNotice(false);
+    if (!Lock.claim({ mode: capMode })) { setLockedElsewhere(true); return; }
     setLockedElsewhere(false);
     beginCapture();
   };
@@ -467,10 +480,28 @@ function LiveCaptureHost() {
           <span className="center" style={{ width:34, height:34, borderRadius:10, background:'var(--accent-soft)', color:'var(--accent-strong)', flex:'none' }}><Icon name="lock" size={17} /></span>
           <div className="stack" style={{ gap:2 }}>
             <span style={{ fontWeight:650, fontSize:13.5 }}>Background mode lives in the Kithra mobile app</span>
-            <span className="faint" style={{ fontSize:12.5, lineHeight:1.5 }}>On iOS/Android your chosen mode keeps recording even when your phone is locked or the screen is off — shown only as a small Kithra logo in your notification bar. Everything stays encrypted, backs up every 15 minutes, and you can pause or revoke it anytime.</span>
+            <span className="faint" style={{ fontSize:12.5, lineHeight:1.5 }}>On iOS/Android your chosen mode keeps recording even when your phone is locked or the screen is off — shown only as a small Kithra logo in your notification bar. Everything stays encrypted, checkpoints every 12 seconds, and you can pause or revoke it anytime.</span>
           </div>
         </div>
       </div>
+
+      {/* one-time reminder: recording other people needs their consent */}
+      {showRecNotice && (
+        <div className="lc-confirm" onMouseDown={(e)=>{ if(e.target===e.currentTarget) setShowRecNotice(false); }}>
+          <div className="lc-confirm-card card">
+            <span className="center" style={{ width:52, height:52, borderRadius:16, background:'var(--accent-soft)', color:'var(--accent-strong)', margin:'0 auto 12px' }}><Icon name="shield" size={24} /></span>
+            <h3 className="display" style={{ fontSize:21, margin:'0 0 6px', textAlign:'center' }}>Before you record</h3>
+            <p className="muted" style={{ margin:'0 0 16px', fontSize:13.5, lineHeight:1.55, textAlign:'center' }}>
+              Voice is personal data. If this recording will include <strong>other people</strong>, the law in India (DPDP Act) and many other places requires their <strong>informed consent</strong> first. Recording just yourself? You’re good to go.
+            </p>
+            <div className="row" style={{ gap:10 }}>
+              <button className="btn btn-ghost btn-lg grow" onClick={()=>setShowRecNotice(false)}>Cancel</button>
+              <button className="btn btn-primary btn-lg grow" onClick={ackAndStart}><Icon name="check" size={17} />I understand — start</button>
+            </div>
+            <button className="linkbtn" style={{ fontSize:12, display:'block', margin:'12px auto 0' }} onClick={()=>{ setShowRecNotice(false); fullClose(); go('legal'); }}>Read the recording policy</button>
+          </div>
+        </div>
+      )}
 
       {/* permission ask before going background */}
       {askBg && (

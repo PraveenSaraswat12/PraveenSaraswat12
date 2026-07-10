@@ -320,7 +320,6 @@ function FullScreen({ route }) {
     auth: window.Auth,
     onboarding: window.Onboarding,
     import: window.ImportSources,
-    processing: window.Processing,
     legal: window.Legal,
   };
   const Screen = map[route] || window.Landing;

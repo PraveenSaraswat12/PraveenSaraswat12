@@ -177,7 +177,7 @@ function Conversation() {
           {/* energy curve */}
           {Array.isArray(a.energy) && a.energy.length>2 && (
             <Panel title="Vocal energy" sub="Loudness over this recording (measured on-device)">
-              <LineChart series={[{ color:'var(--accent)', data:a.energy }]} height={150} yMin={0} yMax={1.05} labels={a.energy.map(()=> '')} />
+              <LineChart series={[{ color:'var(--accent)', data:a.energy.map((y,x)=>({x,y})) }]} height={150} yMin={0} yMax={1.05} labels={a.energy.map(()=> '')} />
             </Panel>
           )}
         </div>
