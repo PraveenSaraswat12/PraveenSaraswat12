@@ -3,10 +3,20 @@ name: Deploy Kithra to GitHub Pages
 # Builds the Vite app and publishes it to GitHub Pages.
 # Pages is enabled automatically by configure-pages (enablement: true), so no
 # manual Settings → Pages step is required for the first deploy.
+#
+# IMPORTANT — why the page_build trigger exists: this repo's Pages source is
+# "Deploy from a branch", so GitHub's legacy pages-build-deployment pipeline
+# ALSO deploys the raw repo root (unbuilt index.html → /src/main.jsx) on every
+# push to main, racing this workflow; whichever finishes last is what the
+# site serves. page_build fires exactly when that legacy pipeline builds, so
+# we re-deploy the real build right after it and always win the race. The
+# clean permanent fix is Settings → Pages → Source → "GitHub Actions", which
+# stops the legacy pipeline entirely — this trigger then simply never fires.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+  page_build:
 
 permissions:
   contents: read
@@ -42,6 +52,11 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url || steps.deployment2.outputs.page_url }}
     steps:
+      # When woken by the legacy pipeline (page_build), let it finish landing
+      # first — then our deployment below overwrites it and stays live.
+      - name: Let the legacy branch deploy settle
+        if: github.event_name == 'page_build'
+        run: sleep 75
       # GitHub Pages occasionally returns a transient "Deployment failed, try
       # again later" — auto-retry once so we don't need a manual re-run.
       - id: deployment
