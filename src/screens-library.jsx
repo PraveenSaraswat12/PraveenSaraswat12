@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, RealPlayer, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Icon, RealPlayer, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, QuietWave, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 /* ============================================================
    KITHRA — Recordings: YOUR real library (no sample data)
    Everything here is audio you actually recorded or uploaded.
@@ -91,6 +91,7 @@ function Library() {
             <h3 className="display" style={{ fontSize:22, margin:0 }}>No recordings yet</h3>
             <p className="muted" style={{ margin:0, fontSize:14, lineHeight:1.55 }}>Record a thought or upload a call — Kithra analyzes it on-device, and it shows up here as your real library. Where talk becomes insight.</p>
             <button className="btn btn-primary btn-lg" onClick={()=>go('analyze')}><Icon name="mic" size={18} />Make your first recording</button>
+            <QuietWave width={230} height={26} className="quiet-empty-wave" />
           </div>
         </div>
       ) : filtered.length===0 ? (

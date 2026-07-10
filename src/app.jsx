@@ -281,6 +281,14 @@ function AppProvider() {
     height:'100%',
   };
 
+  // Mirror the theme onto <html> so the page canvas behind #lumen-root follows
+  // it too — otherwise any scroll past the app frame exposes an untinted body.
+  React.useEffect(() => {
+    const el = document.documentElement;
+    el.dataset.theme = t.theme;
+    el.dataset.mode = t.mode;
+  }, [t.theme, t.mode]);
+
   const isApp = ROUTES[route]?.app;
   // real login gate: app screens require a real account (Google or email).
   // No offline / local-only escape — an account is always required.

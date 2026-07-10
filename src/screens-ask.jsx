@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
+import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, QuietWave, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 import { askKithra, aiReady } from './ai.js';
 /* ============================================================
    KITHRA — Ask: a REAL agent over YOUR recordings & books
@@ -136,6 +136,7 @@ function AskKithra() {
                 </p>
               </div>
               {(clips||[]).length===0 && <button className="btn btn-primary" onClick={()=>go('analyze')}><Icon name="mic" size={16} />Record something first</button>}
+              <QuietWave width={230} height={26} className="quiet-empty-wave" />
               <PrivacyChip text="Questions use only what you’ve consented to share" />
             </div>
           </div>
