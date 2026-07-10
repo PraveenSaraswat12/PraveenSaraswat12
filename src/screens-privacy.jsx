@@ -1,9 +1,24 @@
 import React from 'react';
+import JSZip from 'jszip';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 import { Panel } from './screens-dashboard.jsx';
 /* ============================================================
    LUMEN — Privacy & Data Controls
    ============================================================ */
+// shared by the export + delete-by-date flows: does this clip's timestamp
+// fall inside the chosen scope ('3'|'7'|'30' days, 'custom' range, 'all')?
+function inDateRange(ts, scope, from, to) {
+  if (scope === 'all') return true;
+  if (scope === 'custom') {
+    const fromT = from ? new Date(from + 'T00:00:00').getTime() : -Infinity;
+    const toT = to ? new Date(to + 'T23:59:59').getTime() : Infinity;
+    return (ts || 0) >= fromT && (ts || 0) <= toT;
+  }
+  const days = parseInt(scope, 10);
+  if (!Number.isFinite(days)) return true;
+  return ts != null && (Date.now() - ts) <= days * 86400000;
+}
+const escHtml = (s) => String(s || '').replace(/[&<>]/g, (m) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m]));
 function Toggle({ on, onClick }) {
   return <button className={`toggle ${on?'on':''}`} onClick={onClick} role="switch" aria-checked={on}><i /></button>;
 }
@@ -109,7 +124,7 @@ function ConsentDataPanel() {
       exportedAt: new Date().toISOString(), app: 'Kithra', plan,
       consents,
       books,
-      recordings: (clips||[]).map(c => ({ id:c.id, name:c.name, durSec:c.durSec, source:c.source, analysis:c.analysis })),
+      recordings: (clips||[]).map(c => ({ id:c.id, name:c.name, ts:c.ts, durSec:c.durSec, source:c.source, transcript:c.transcript||null, analysis:c.analysis||null, insights:c.insights||null })),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type:'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kithra-data-export.json';
@@ -163,25 +178,88 @@ function ConsentDataPanel() {
 }
 
 function Privacy() {
-  const { mode, showToast, setWiped, go, plan, planAllows, redact, setRedact } = useApp();
+  const { mode, showToast, setWiped, go, plan, planAllows, redact, setRedact, clips, removeClip } = useApp();
   const [delOpen, setDelOpen] = React.useState(false);
   const [expOpen, setExpOpen] = React.useState(false);
   const DeleteModal = window.DeleteModal;
   const ExportModal = window.ExportModal;
-  const retCap = plan==='premium' ? 'Unlimited' : plan==='plus' ? '180 days' : '60 days';
-  const [s, setS] = React.useState({ encrypt:true, training:false, team:mode==='business', autoDelete:false, redact:true, backup:true });
-  const [retain, setRetain] = React.useState('60');
-  const [backupEvery, setBackupEvery] = React.useState('15');
-  const set = (k) => setS(p => ({ ...p, [k]: !p[k] }));
 
-  const Setting = ({ icon, title, desc, k, locked }) => (
-    <div className="pv-row">
+  // real per-recording transcript export — a genuine .zip, not a fake toast
+  const exportTranscripts = async () => {
+    const targets = (clips||[]).filter(c => c.transcript);
+    if (!targets.length) { showToast('No transcribed recordings to export yet','shield'); return; }
+    showToast(`Zipping ${targets.length} transcript${targets.length===1?'':'s'}…`,'file');
+    try {
+      const zip = new JSZip();
+      const used = new Map();
+      targets.forEach(c => {
+        const base = (c.name || 'recording').replace(/[\\/:*?"<>|]/g,'-').trim() || 'recording';
+        const n = (used.get(base) || 0) + 1; used.set(base, n);
+        zip.file(n > 1 ? `${base} (${n}).txt` : `${base}.txt`, `${c.name || 'Recording'}\n${new Date(c.ts||0).toLocaleString()}\n\n${c.transcript}`);
+      });
+      const blob = await zip.generateAsync({ type:'blob' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'kithra-transcripts.zip';
+      document.body.appendChild(a); a.click(); a.remove();
+      showToast('Transcripts downloaded','download');
+    } catch (e) { showToast('Couldn’t build the zip — try again','shield'); }
+  };
+
+  // real PDF export — renders an actual printable report and hands off to the
+  // browser's native print-to-PDF, so the file it produces is always correct
+  // (no PDF-drawing library needed, and every browser already does this well)
+  const exportPDF = ({ content, scope, from, to, label }) => {
+    const targets = (clips||[]).filter(c => inDateRange(c.ts, scope, from, to));
+    if (!targets.length) { showToast('No recordings in that range to export','shield'); return; }
+    const sections = targets.map(c => {
+      const ins = c.insights, a = c.analysis || {};
+      let body = '';
+      if (content !== 'transcript') {
+        body += ins
+          ? `<h3>Summary</h3><p>${escHtml(ins.summary || '—')}</p>${ins.win?`<p><strong>Went well:</strong> ${escHtml(ins.win)}</p>`:''}${ins.improve?`<p><strong>To improve:</strong> ${escHtml(ins.improve)}</p>`:''}${ins.next?`<p><strong>Next step:</strong> ${escHtml(ins.next)}</p>`:''}`
+          : `<p><em>No AI insights generated for this recording.</em></p>`;
+      }
+      if (content !== 'summary') body += `<h3>Transcript</h3><p style="white-space:pre-wrap">${escHtml(c.transcript || 'Not transcribed.')}</p>`;
+      const meta = [a.wpm && `${a.wpm} wpm`, a.talkRatio!=null && `${Math.round(a.talkRatio*100)}% talk time`, a.tone && a.tone.label].filter(Boolean).join(' · ');
+      return `<section style="page-break-inside:avoid;margin-bottom:28px"><h2>${escHtml(c.name||'Recording')}</h2><p style="color:#666;font-size:13px">${new Date(c.ts||0).toLocaleString()}${c.durSec?` · ${Math.round(c.durSec/60)} min`:''}${meta?' · '+escHtml(meta):''}</p>${body}</section>`;
+    }).join('<hr style="margin:24px 0;border:none;border-top:1px solid #ddd">');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Kithra export — ${escHtml(label)}</title>
+<style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1b1e39;max-width:760px;margin:32px auto;padding:0 24px;line-height:1.5}
+h1{font-size:22px}h2{font-size:17px;margin:0 0 4px}h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:#888;margin:14px 0 4px}
+p{margin:4px 0 10px;font-size:14px}@media print{body{margin:0;padding:16px}}</style></head>
+<body><h1>Kithra export</h1><p style="color:#666">${escHtml(label)} · ${targets.length} recording${targets.length===1?'':'s'} · generated ${new Date().toLocaleString()}</p>${sections}
+<script>window.onload=()=>setTimeout(()=>window.print(),200)</script></body></html>`;
+    const w = window.open('', '_blank');
+    if (!w) { showToast('Allow pop-ups to export as PDF','shield'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    showToast(`Opening ${targets.length} recording${targets.length===1?'':'s'} — use “Save as PDF” in the print dialog`,'download');
+  };
+
+  // real date-scoped deletion — actually removes the matching recordings
+  // (device + cloud, via the same removeClip every other delete uses)
+  const deleteByDate = ({ scope, from, to }) => {
+    const targets = (clips||[]).filter(c => inDateRange(c.ts, scope, from, to));
+    targets.forEach(c => removeClip(c.id));
+    return targets.length;
+  };
+  const retCap = plan==='premium' ? 'Unlimited' : plan==='plus' ? '180 days' : '60 days';
+
+  // Every remaining row here describes something Kithra actually, always does —
+  // there's nothing left to toggle, so this renders an "Always on" fact, not a
+  // preference. (A "Coming soon" variant covers roadmap items honestly instead
+  // of showing a toggle that would silently do nothing.)
+  const Setting = ({ icon, title, desc, soon }) => (
+    <div className="pv-row" style={soon ? { opacity:.75 } : undefined}>
       <span className="center" style={{ width:42, height:42, borderRadius:12, background:'var(--surface-2)', border:'1px solid var(--line)', color:'var(--ink-2)', flex:'none' }}><Icon name={icon} size={20} /></span>
       <div className="stack grow" style={{ gap:2, minWidth:0 }}>
-        <span className="row" style={{ gap:8 }}><span style={{ fontWeight:650, fontSize:14.5 }}>{title}</span>{locked && <span className="badge badge-neutral"><Icon name="lock" size={11} />Always on</span>}</span>
+        <span className="row" style={{ gap:8 }}>
+          <span style={{ fontWeight:650, fontSize:14.5 }}>{title}</span>
+          {soon
+            ? <span className="badge badge-neutral"><Icon name="clock" size={11} />Coming soon</span>
+            : <span className="badge badge-neutral"><Icon name="lock" size={11} />Always on</span>}
+        </span>
         <span className="muted" style={{ fontSize:13, lineHeight:1.45 }}>{desc}</span>
       </div>
-      {locked ? <span className="center" style={{ width:42, height:27 }}><Icon name="check" size={18} stroke={2.4} style={{ color:'var(--good)' }} /></span> : <Toggle on={s[k]} onClick={()=>set(k)} />}
+      {!soon && <span className="center" style={{ width:42, height:27 }}><Icon name="check" size={18} stroke={2.4} style={{ color:'var(--good)' }} /></span>}
     </div>
   );
 
@@ -215,7 +293,7 @@ function Privacy() {
 
         {/* controls */}
         <Panel title="Privacy" sub="Decide how Kithra handles your recordings">
-          <Setting icon="lock" title="End-to-end encryption" desc="Audio and transcripts are encrypted in transit and at rest." locked />
+          <Setting icon="lock" title="End-to-end encryption" desc="Audio and transcripts are encrypted in transit and at rest." />
           <div className="pv-row">
             <span className="center" style={{ width:42, height:42, borderRadius:12, background:'var(--surface-2)', border:'1px solid var(--line)', color:'var(--ink-2)', flex:'none' }}><Icon name="eye" size={20} /></span>
             <div className="stack grow" style={{ gap:2, minWidth:0 }}>
@@ -224,23 +302,17 @@ function Privacy() {
             </div>
             <Toggle on={redact} onClick={()=>setRedact(!redact)} />
           </div>
-          <Setting icon="spark" title="Use my data to improve Kithra" desc="When off, your conversations are never used to train any model. Off by default." k="training" />
-          {mode==='business' && <Setting icon="user" title="Share insights with my team" desc="Let teammates on your workspace see aggregated patterns (never raw audio)." k="team" />}
+          <Setting icon="spark" title="Never used to train models" desc="Your conversations are never sold and never used to train any shared model — no exceptions, no toggle needed." />
+          {mode==='business' && <Setting icon="user" title="Share insights with my team" desc="Let teammates on your workspace see aggregated patterns (never raw audio)." soon />}
         </Panel>
 
-        <Panel title="Data retention" sub="How long Kithra keeps your recordings">
+        <Panel title="Data retention" sub="How long your plan keeps recordings available">
           <div className="row" style={{ gap:10, flexWrap:'wrap', alignItems:'center' }}>
             <span className="badge badge-accent" style={{ height:26 }}><Icon name="clock" size={12} />Your plan: {retCap}</span>
             <span className="faint" style={{ fontSize:12.5 }}>Free 60 days · Plus 180 days · Premium unlimited</span>
           </div>
-          <div className="seg-radio" style={{ margin:'12px 0 6px' }}>
-            {[['60','60 days','free'],['180','180 days','plus'],['forever','Unlimited','premium']].map(o=>{
-              const ok = planAllows(o[2]); const on = retain===o[0];
-              return <button key={o[0]} className={`chip ${on?'is-on':''} ${ok?'':'gated'}`} onClick={()=> ok ? setRetain(o[0]) : (showToast(`${o[1]} retention needs ${o[2]==='premium'?'Premium':'Plus'}`,'spark'), go('pricing')) }>{o[1]}{!ok && <span className="lock-pill"><Icon name="lock" size={9} />{o[2]==='premium'?'Premium':'Plus'}</span>}</button>;
-            })}
-          </div>
-          <p className="faint" style={{ fontSize:12.5, margin:'10px 0 0', lineHeight:1.5 }}>
-            {retain==='forever' ? 'Recordings are kept until you remove them. You\u2019re always in control.' : `Recordings and transcripts are automatically deleted after ${retain} days.`}
+          <p className="faint" style={{ fontSize:12.5, margin:'12px 0 0', lineHeight:1.5 }}>
+            This is your plan’s storage allowance, not an automatic-deletion timer — Kithra doesn’t delete anything on its own. Everything you record stays until you remove it yourself, above or from Recordings.
           </p>
         </Panel>
 
@@ -248,28 +320,20 @@ function Privacy() {
           <div className="card card-pad" style={{ background:'var(--accent-soft)', border:'1px solid color-mix(in srgb,var(--accent) 18%,transparent)', display:'flex', gap:13, alignItems:'center', marginBottom:14 }}>
             <span className="center" style={{ width:42, height:42, borderRadius:12, background:'var(--accent)', color:'var(--accent-ink)', flex:'none' }}><Icon name="refresh" size={21} /></span>
             <div className="stack grow" style={{ gap:2 }}>
-              <span style={{ fontWeight:700, fontSize:14 }}>Auto-backup every 15 minutes</span>
-              <span className="muted" style={{ fontSize:12.5, lineHeight:1.45 }}>While Listen mode runs, Kithra chunks your audio and saves it to encrypted cloud storage every 15 min, so nothing is ever lost — memory is what makes the analysis good.</span>
+              <span style={{ fontWeight:700, fontSize:14 }}>Checkpointed every 12 seconds</span>
+              <span className="muted" style={{ fontSize:12.5, lineHeight:1.45 }}>While Listen mode runs, Kithra saves your recording every 12 seconds — plus immediately on Stop, on close, and on tab exit — so a crash or a killed tab can lose at most a few seconds.</span>
             </div>
           </div>
-          <Setting icon="refresh" title="Continuous cloud backup" desc="Keep saving captured audio in the background every 15 minutes." k="backup" />
-          <Setting icon="mic" title="Listen mode is free, forever" desc="Capturing and storing your audio never costs anything. Insights are the paid part." locked />
-          <div className="seg-radio" style={{ marginTop:14 }}>
-            <span className="faint" style={{ fontSize:12, alignSelf:'center', marginRight:4 }}>Backup interval</span>
-            {[['5','5 min'],['15','15 min'],['30','30 min']].map(o=>(
-              <button key={o[0]} className={`chip ${backupEvery===o[0]?'is-on':''}`} onClick={()=>setBackupEvery(o[0])}>{o[1]}</button>
-            ))}
-          </div>
+          <Setting icon="refresh" title="Continuous autosave" desc="Not a preference you can turn off — losing a recording is worse than any battery or data cost of saving it often." />
+          <Setting icon="mic" title="Listen mode is free, forever" desc="Capturing and storing your audio never costs anything. Insights are the paid part." />
         </Panel>
 
-        <Panel title="Import sources" sub="Optional — live capture is your main source">
-          {[['Google Drive','drive','#16a765',true]].map((c,i)=>(
-            <div key={i} className="pv-row">
-              <span className="int-logo" style={{ background:c[2], width:40, height:40 }}><Icon name={c[1]} size={20} /></span>
-              <div className="stack grow" style={{ gap:2 }}><span style={{ fontWeight:650, fontSize:14 }}>{c[0]}</span><span className="faint" style={{ fontSize:12.5 }}>{c[3]?'Connected · read-only access':'Not connected'}</span></div>
-              <button className={`btn btn-sm ${c[3]?'btn-ghost':'btn-soft'}`} onClick={()=>showToast(c[3]?`${c[0]} disconnected`:`Connecting ${c[0]}…`, c[3]?'x':'link')}>{c[3]?'Disconnect':'Connect'}</button>
-            </div>
-          ))}
+        <Panel title="Import sources" sub="Live capture and file upload work today; meeting integrations are on the roadmap">
+          <div className="pv-row">
+            <span className="int-logo" style={{ background:'var(--accent)', width:40, height:40 }}><Icon name="upload" size={20} /></span>
+            <div className="stack grow" style={{ gap:2 }}><span style={{ fontWeight:650, fontSize:14 }}>Manage sources</span><span className="faint" style={{ fontSize:12.5 }}>Record live, upload files, and see what’s connected — no fake “connected” states, ever.</span></div>
+            <button className="btn btn-soft btn-sm" onClick={()=>go('sources')}>Open Sources</button>
+          </div>
         </Panel>
 
         <Panel title="Export & delete" sub="Download transcripts (Plus) or full PDF exports (Premium)">
@@ -277,7 +341,7 @@ function Privacy() {
             <button className="btn btn-soft" onClick={()=> planAllows('premium') ? setExpOpen(true) : (showToast('PDF export is a Premium feature','spark'), go('pricing')) }>
               <Icon name="download" size={16} />Export as PDF{!planAllows('premium') && <span className="lock-pill" style={{ marginLeft:2 }}><Icon name="lock" size={9} />Premium</span>}
             </button>
-            <button className="btn btn-soft" onClick={()=> planAllows('plus') ? showToast('Downloading transcripts (.zip)…','file') : (showToast('Transcript download is a Plus feature','spark'), go('pricing')) }>
+            <button className="btn btn-soft" onClick={()=> planAllows('plus') ? exportTranscripts() : (showToast('Transcript download is a Plus feature','spark'), go('pricing')) }>
               <Icon name="file" size={16} />Download transcripts{!planAllows('plus') && <span className="lock-pill" style={{ marginLeft:2 }}><Icon name="lock" size={9} />Plus</span>}
             </button>
           </div>
@@ -292,8 +356,13 @@ function Privacy() {
           </div>
         </Panel>
       </div>
-      {delOpen && <DeleteModal onClose={()=>setDelOpen(false)} onConfirm={(label)=>{ setDelOpen(false); setWiped(true); showToast(`Deleted recordings — ${label}`, 'trash'); go('library'); }} />}
-      {expOpen && <ExportModal onClose={()=>setExpOpen(false)} onConfirm={(label)=>{ setExpOpen(false); showToast(`Exporting PDF — ${label}`, 'download'); }} />}
+      {delOpen && <DeleteModal onClose={()=>setDelOpen(false)} onConfirm={(sel)=>{
+        setDelOpen(false);
+        const n = deleteByDate(sel);
+        if (n) { setWiped(true); showToast(`Deleted ${n} recording${n===1?'':'s'} — ${sel.label}`, 'trash'); go('library'); }
+        else showToast('No recordings in that range', 'shield');
+      }} />}
+      {expOpen && <ExportModal onClose={()=>setExpOpen(false)} onConfirm={(sel)=>{ setExpOpen(false); exportPDF(sel); }} />}
     </div>
   );
 }

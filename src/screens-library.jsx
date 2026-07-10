@@ -183,7 +183,7 @@ function DeleteModal({ onClose, onConfirm }) {
         )}
         <div className="row" style={{ gap:10 }}>
           <button className="btn btn-ghost btn-lg grow" onClick={onClose}>Cancel</button>
-          <button className="btn btn-lg grow" style={{ background:'var(--bad)', color:'#fff' }} onClick={()=>onConfirm(label)}><Icon name="trash" size={17} />Delete {scope==='all'?'everything':'these'}</button>
+          <button className="btn btn-lg grow" style={{ background:'var(--bad)', color:'#fff' }} onClick={()=>onConfirm({ scope, from, to, label })}><Icon name="trash" size={17} />Delete {scope==='all'?'everything':'these'}</button>
         </div>
       </div>
     </div>
@@ -268,7 +268,7 @@ function ExportModal({ onClose, onConfirm }) {
         )}
         <div className="row" style={{ gap:10, marginTop:4 }}>
           <button className="btn btn-ghost btn-lg grow" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary btn-lg grow" onClick={()=>onConfirm(`${clabel}, ${rlabel}`)}><Icon name="download" size={17} />Generate PDF</button>
+          <button className="btn btn-primary btn-lg grow" onClick={()=>onConfirm({ content, scope, from, to, label:`${clabel}, ${rlabel}` })}><Icon name="download" size={17} />Generate PDF</button>
         </div>
       </div>
     </div>

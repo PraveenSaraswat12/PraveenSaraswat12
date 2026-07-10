@@ -31,12 +31,15 @@ function useMounted(delay = 60) {
 
 /* ---------- Sparkline ---------- */
 function Sparkline({ data, color = 'var(--accent)', width = 120, height = 38, fill = true, strokeW = 2 }) {
+  // guard: a single point (or none) would divide by zero below and leak NaN
+  // into the SVG path — draw a flat centered line instead of crashing.
+  if (!Array.isArray(data) || data.length < 2) data = [0, 0];
   const min = Math.min(...data), max = Math.max(...data);
   const rng = max - min || 1;
   const pad = 3;
   const pts = data.map((v, i) => [
     pad + (i / (data.length - 1)) * (width - pad * 2),
-    height - pad - ((v - min) / rng) * (height - pad * 2),
+    height - pad - (((Number.isFinite(v) ? v : min) - min) / rng) * (height - pad * 2),
   ]);
   const line = smoothPath(pts);
   const id = React.useId();
@@ -62,13 +65,16 @@ function Sparkline({ data, color = 'var(--accent)', width = 120, height = 38, fi
 /* ---------- LineChart (multi-series) ---------- */
 function LineChart({ series, height = 220, yMax, yMin = 0, labels, area = true, grid = true, strokeW = 2.4 }) {
   const W = 720, H = height, padL = 8, padR = 12, padT = 16, padB = labels ? 26 : 12;
-  const allY = series.flatMap(s => s.data.map(d => d.y));
-  const max = yMax != null ? yMax : Math.max(...allY) * 1.12;
-  const min = yMin != null ? yMin : Math.min(...allY);
-  const rng = max - min || 1;
+  // guard: a malformed series (plain numbers instead of {x,y}, or too few
+  // points) used to leak NaN into the SVG path data — coerce and fall back
+  // instead of crashing the chart.
+  const allY = series.flatMap(s => s.data.map(d => d.y)).filter(Number.isFinite);
+  const max = yMax != null ? yMax : (allY.length ? Math.max(...allY) * 1.12 : 1);
+  const min = yMin != null ? yMin : (allY.length ? Math.min(...allY) : 0);
+  const rng = (max - min) || 1;
   const n = series[0].data.length;
-  const X = i => padL + (i / (n - 1)) * (W - padL - padR);
-  const Y = v => padT + (1 - (v - min) / rng) * (H - padT - padB);
+  const X = i => padL + (n > 1 ? (i / (n - 1)) * (W - padL - padR) : 0);
+  const Y = v => padT + (1 - ((Number.isFinite(v) ? v : min) - min) / rng) * (H - padT - padB);
   const on = useMounted();
   const gridLines = grid ? [0, 0.25, 0.5, 0.75, 1] : [];
   return (
@@ -108,7 +114,9 @@ function Donut({ segments, size = 160, thickness = 20, gap = 3, centerTop, cente
   const r = (size - thickness) / 2;
   const cx = size / 2, cy = size / 2;
   const circ = 2 * Math.PI * r;
-  const total = segments.reduce((a, s) => a + s.value, 0);
+  // guard: an all-zero segment set (e.g. no data yet) divides by zero below
+  // and leaks NaN into the stroke-dasharray — fall back to an empty ring.
+  const total = segments.reduce((a, s) => a + s.value, 0) || 1;
   const on = useMounted();
   let acc = 0;
   return (
