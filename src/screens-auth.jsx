@@ -60,6 +60,17 @@ function Auth({ gate }) {
     return () => { try { off && off(); } catch (e) {} };
   }, [configured]);
 
+  // native Google sign-in completes in the background (no page reload — see
+  // cloud.js's appUrlOpen listener), so this screen has to notice the new
+  // session itself instead of relying on a fresh page load to pick it up.
+  React.useEffect(() => {
+    if (!configured || !Cloud.onAuthChange) return;
+    const off = Cloud.onAuthChange((event) => {
+      if (event === 'SIGNED_IN') { setBusy(false); arrive('Signed in'); }
+    });
+    return () => { try { off && off(); } catch (e) {} };
+  }, [configured]);
+
   // ---- Google ----
   const google = async () => {
     setErr(''); setNotice('');

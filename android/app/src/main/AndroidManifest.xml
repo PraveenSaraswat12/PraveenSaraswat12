@@ -22,6 +22,18 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Google Sign-In callback: Google won't run its consent screen inside
+                 an embedded WebView, so auth happens in an in-app browser tab
+                 (@capacitor/browser) that redirects here via this custom scheme
+                 instead of loading the callback as a normal web page. Handled by
+                 @capacitor/app's appUrlOpen listener in src/cloud.js. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="com.kithra.app" android:host="auth-callback" />
+            </intent-filter>
+
         </activity>
 
         <provider

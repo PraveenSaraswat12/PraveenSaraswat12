@@ -1,4 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
+import { App as CapApp } from '@capacitor/app';
 
 /* ============================================================
    KITHRA — optional cloud backend (Supabase + Gemma)
@@ -11,6 +14,50 @@ import { createClient } from '@supabase/supabase-js';
    when unconfigured, so the app works fully offline/local-first.
    ============================================================ */
 const CFG_KEY = 'kithra_cloud';
+
+// ---- native Google OAuth (Android/Capacitor) ----
+// Web uses a same-window redirect (signInWithOAuth navigates the page itself,
+// Supabase parses the returned #access_token). That can't work in the native
+// app: Google refuses to run its consent screen inside an embedded WebView
+// ("disallowed_useragent"), so Android hands the flow to the SYSTEM BROWSER —
+// which then has no way to route the final redirect back into the app (it
+// just lands on the public website, stranding the user there).
+// Fix: open the OAuth URL in an in-app browser tab (allowed by Google) with
+// redirectTo set to a custom URL scheme the app owns. AndroidManifest.xml
+// registers that scheme so the OS relaunches/resumes THIS app with the
+// callback URL instead of loading it as a normal web page; the listener
+// below picks the tokens out of it and closes the tab.
+// Requires this exact URL added to Supabase → Authentication → URL
+// Configuration → Redirect URLs: com.kithra.app://auth-callback
+const NATIVE_REDIRECT = 'com.kithra.app://auth-callback';
+const isNative = () => { try { return Capacitor.isNativePlatform(); } catch (e) { return false; } };
+
+// pure + exported so it's testable without a device: pulls the tokens Supabase
+// puts in the callback URL's fragment (falls back to query in case a browser
+// along the redirect chain flattens the fragment into it).
+export function parseAuthCallbackUrl(url) {
+  if (!url || url.indexOf(NATIVE_REDIRECT) !== 0) return null;
+  const tail = url.split('#')[1] || url.split('?')[1] || '';
+  const params = new URLSearchParams(tail);
+  const access_token = params.get('access_token');
+  const refresh_token = params.get('refresh_token');
+  return (access_token && refresh_token) ? { access_token, refresh_token } : null;
+}
+
+if (isNative()) {
+  CapApp.addListener('appUrlOpen', async ({ url }) => {
+    const tokens = parseAuthCallbackUrl(url);
+    if (!tokens) return;
+    try {
+      const c = getClient();
+      if (c) await c.auth.setSession(tokens);
+    } catch (e) {}
+    try { await Browser.close(); } catch (e) {}
+    // reuse the app's existing focus->refreshUser() wiring (app.jsx) so the
+    // new session is picked up the same way returning to the tab already does
+    try { window.dispatchEvent(new Event('focus')); } catch (e) {}
+  });
+}
 
 function getConfig() {
   try { if (window.KITHRA_CONFIG && window.KITHRA_CONFIG.SUPABASE_URL && window.KITHRA_CONFIG.SUPABASE_ANON_KEY) return window.KITHRA_CONFIG; } catch (e) {}
@@ -123,20 +170,30 @@ const Cloud = {
   },
 
   // ---- Google sign-in (OAuth redirect) ----
-  // Returns to the current URL; Supabase picks the session out of the hash on
-  // return (detectSessionInUrl). Requires the Google provider + this redirect
-  // URL to be enabled in Supabase → Authentication → Providers / URL config.
+  // Web: same-window redirect; Supabase picks the session out of the URL hash
+  // on return (detectSessionInUrl). Native: opens an in-app browser tab and
+  // comes back via the custom-scheme listener above (skipBrowserRedirect so
+  // supabase-js hands us the auth URL instead of navigating the WebView,
+  // which Google blocks anyway). Requires the Google provider on, plus both
+  // redirect URLs (the web origin AND com.kithra.app://auth-callback) added
+  // in Supabase → Authentication → URL Configuration.
   async signInWithGoogle(redirectTo) {
     const c = await getClient(); if (!c) throw new Error('Connect your cloud first');
-    // Return to the app's CLEAN base URL (origin + path, no #hash route) so the
-    // session lands on a stable, allow-listable URL. This exact URL must be set
-    // in Supabase → Authentication → URL Configuration (Site URL + Redirect URLs).
+    const native = isNative();
+    // Web: return to the app's CLEAN base URL (origin + path, no #hash route)
+    // so the session lands on a stable, allow-listable URL.
     const cleanUrl = window.location.origin + window.location.pathname;
     const { data, error } = await withTimeout(c.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: redirectTo || cleanUrl, queryParams: { prompt: 'select_account' } },
+      options: {
+        redirectTo: redirectTo || (native ? NATIVE_REDIRECT : cleanUrl),
+        queryParams: { prompt: 'select_account' },
+        skipBrowserRedirect: native,
+      },
     }), 20000, NET_MSG);
-    if (error) throw error; return data;
+    if (error) throw error;
+    if (native && data && data.url) await Browser.open({ url: data.url });
+    return data;
   },
 
   // book sync (called from the app whenever the library changes, if signed in)

@@ -1,5 +1,7 @@
 import React from 'react';
 import * as ReactDOM from 'react-dom/client';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 import { Icon, LumenMark, Wordmark, Waveform, LiveWave, waveHeights, Avatar, Badge, Delta, SentDot, StatusPill, PrivacyChip, Dropdown, EvidenceList, Sparkline, LineChart, Donut, Ring, HBars, Legend, MoodStrip, smoothPath, useMounted, AppContext, useApp, ROUTES, useTweaks, TweaksPanel, TweakSection, TweakRow, TweakSlider, TweakToggle, TweakRadio, TweakSelect, TweakText, TweakNumber, TweakColor, TweakButton } from './kit.js';
 import { LiveCaptureHost } from './screens-capture.jsx';
 import { Toast, PermissionGate } from './screens-system.jsx';
@@ -253,6 +255,38 @@ function AppProvider() {
   const minimizeCapture = React.useCallback(() => setCapture(c => ({ ...c, minimized:true })), []);
   const expandCapture = React.useCallback(() => setCapture(c => ({ ...c, open:true, minimized:false })), []);
   const setCapMode = React.useCallback((capMode) => setCapture(c => ({ ...c, capMode })), []);
+  const captureRef = React.useRef(capture); captureRef.current = capture;
+
+  // Android hardware/gesture back button. Registering a listener replaces
+  // Capacitor's bare default (goBack() if the WebView has history, else
+  // instantly kill the activity) — without this, back closes nothing, and
+  // pressing it on the very first screen exits with zero warning, even mid a
+  // live recording. Priority: an expanded Live Capture session minimizes
+  // (never silently drops the session), then any open overlay/sheet closes,
+  // then in-app route history, then a real "press again to exit".
+  React.useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    let lastBackAt = 0;
+    const sub = CapApp.addListener('backButton', ({ canGoBack }) => {
+      if (captureRef.current.open) { minimizeCapture(); return; }
+      const overlay = document.querySelector('.lc-overlay');
+      if (overlay) { overlay.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })); return; }
+      const sheet = document.querySelector('.msheet');
+      if (sheet) { sheet.querySelector('button[aria-label="Close"]')?.click(); return; }
+      const permGate = document.querySelector('.kt-perm-overlay');
+      if (permGate) {
+        const skip = [...permGate.querySelectorAll('button')].find(b => /maybe later/i.test(b.textContent || ''));
+        if (skip) skip.click();
+        return;
+      }
+      if (canGoBack) { window.history.back(); return; }
+      const now = Date.now();
+      if (now - lastBackAt < 2000) { CapApp.exitApp(); return; }
+      lastBackAt = now;
+      showToast('Press back again to exit', 'x');
+    });
+    return () => { sub.then(h => h.remove()).catch(() => {}); };
+  }, [minimizeCapture, showToast]);
 
   const data = window.LUMEN?.[t.mode] || window.LUMEN?.business;
   const ctx = {
@@ -288,6 +322,21 @@ function AppProvider() {
     el.dataset.theme = t.theme;
     el.dataset.mode = t.mode;
   }, [t.theme, t.mode]);
+
+  // Match the native status bar to Kithra's own theme — without this it's
+  // whatever the OS default is, which can land light-on-light or dark-on-dark
+  // against the app's own header and read as a glitch, not a design choice.
+  React.useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    (async () => {
+      try {
+        const { StatusBar, Style } = await import('@capacitor/status-bar');
+        const dark = t.theme === 'dark';
+        await StatusBar.setStyle({ style: dark ? Style.Light : Style.Dark });
+        await StatusBar.setBackgroundColor({ color: dark ? '#0a0b16' : '#f4f1ea' });
+      } catch (e) {}
+    })();
+  }, [t.theme]);
 
   const isApp = ROUTES[route]?.app;
   // real login gate: app screens require a real account (Google or email).
